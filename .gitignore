@@ -1,0 +1,52 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+deploy-debug.log
+
+# agent / IDE tooling (no va a producción)
+.agents/
+.claude/
+.codex/
+.cursor/
+.impeccable.md
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# env & secrets
+.env*
+!.env.example
+
+# firebase
+firebase-debug.log
+firestore-debug.log
+.firebase/
+
+# wordpress legacy / imports
+legacy/wp-config.php
+imports/*.xml
+imports/reclamos/*.sql
+imports/reclamos/sql-backup/
+imports/reclamos/backup-fz3/
+imports/fallos-pdf/
+imports/**/*.bak
+imports/**/*.xml
+service-account.json

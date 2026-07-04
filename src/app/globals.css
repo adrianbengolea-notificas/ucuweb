@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ucu-blue: #0066b3;
+  --ucu-green: #8bc53f;
+  --ucu-yellow: #fdb913;
+  --ucu-magenta: #e6007e;
+  --ucu-dark: #3a3a3a;
+  --ucu-nav: #2b2b2b;
+
+  --surface: oklch(98.5% 0.006 245);
+  --surface-raised: oklch(100% 0 0);
+  --surface-muted: oklch(96% 0.008 245);
+  --ink: oklch(32% 0.012 245);
+  --ink-muted: oklch(52% 0.015 245);
+  --ink-faint: oklch(68% 0.012 245);
+  --border: oklch(90% 0.01 245);
+  --border-strong: oklch(82% 0.015 245);
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+  --space-3xl: 3rem;
+  --space-4xl: 4rem;
+
+  --text-display: clamp(2rem, 1.2rem + 3vw, 3.25rem);
+  --text-title: clamp(1.5rem, 1.1rem + 1.5vw, 2.25rem);
+  --text-subtitle: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+}
+
+body {
+  @apply bg-[var(--surface)] text-[var(--ink)] antialiased;
+}
+
+.ucu-brand-bar {
+  background: linear-gradient(
+    90deg,
+    var(--ucu-blue) 0%,
+    var(--ucu-blue) 25%,
+    var(--ucu-magenta) 25%,
+    var(--ucu-magenta) 50%,
+    var(--ucu-yellow) 50%,
+    var(--ucu-yellow) 75%,
+    var(--ucu-green) 75%,
+    var(--ucu-green) 100%
+  );
+}
+
+/* Editorial prose */
+.prose-ucu {
+  @apply max-w-none font-serif text-[var(--ink)];
+  max-width: 68ch;
+}
+
+.prose-ucu h1,
+.prose-ucu h2,
+.prose-ucu h3,
+.prose-ucu h4 {
+  @apply mb-3 mt-8 font-display font-bold tracking-tight text-[var(--ink)];
+}
+
+.prose-ucu h1 { font-size: var(--text-title); }
+.prose-ucu h2 { font-size: var(--text-subtitle); }
+.prose-ucu h3 { @apply text-lg; }
+
+.prose-ucu p {
+  @apply mb-5 font-serif leading-[1.75] text-[var(--ink-muted)];
+}
+
+.prose-ucu a {
+  @apply font-medium text-ucu-blue underline decoration-ucu-blue/30 underline-offset-2 transition hover:text-[#004a80] hover:decoration-ucu-blue;
+}
+
+.prose-ucu img {
+  @apply my-6 rounded-lg;
+}
+
+.prose-ucu ul {
+  @apply mb-5 list-disc space-y-1 pl-6 font-serif text-[var(--ink-muted)];
+}
+
+.prose-ucu ol {
+  @apply mb-5 list-decimal space-y-1 pl-6 font-serif text-[var(--ink-muted)];
+}
+
+.prose-ucu blockquote {
+  @apply my-6 border-l-2 border-ucu-magenta/40 pl-5 font-serif italic text-[var(--ink-muted)];
+}
+
+.prose-ucu iframe {
+  @apply my-8 aspect-video w-full rounded-lg;
+}
+
+@layer components {
+  .ucu-eyebrow {
+    @apply font-display text-xs font-bold uppercase tracking-[0.2em] text-ucu-magenta;
+  }
+
+  .ucu-section-title {
+    @apply font-display text-xs font-bold uppercase tracking-[0.18em] text-ucu-magenta;
+  }
+
+  .ucu-display {
+    font-size: var(--text-display);
+    @apply font-display font-bold leading-[1.1] tracking-tight text-[var(--ink)];
+  }
+
+  .ucu-title {
+    font-size: var(--text-title);
+    @apply font-display font-bold leading-tight tracking-tight text-[var(--ink)];
+  }
+
+  .ucu-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-ucu-blue px-6 py-3 font-display text-sm font-semibold text-white transition hover:bg-[#004a80] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ucu-blue;
+  }
+
+  .ucu-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-[var(--border-strong)] bg-[var(--surface-raised)] px-6 py-3 font-display text-sm font-semibold text-[var(--ink)] transition hover:border-ucu-blue/40 hover:text-ucu-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ucu-blue;
+  }
+
+  .ucu-btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-white/30 px-6 py-3 font-display text-sm font-semibold text-white transition hover:border-white/60 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white;
+  }
+
+  .ucu-btn-ghost {
+    @apply inline-flex items-center gap-1 font-display text-sm font-semibold text-ucu-blue transition hover:text-[#004a80];
+  }
+
+  .ucu-card {
+    @apply rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] transition;
+  }
+
+  .ucu-card-interactive {
+    @apply ucu-card hover:border-ucu-blue/25 hover:shadow-ucu-md;
+  }
+
+  .field-input {
+    @apply w-full rounded-md border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 py-2.5 font-sans text-sm text-[var(--ink)] outline-none transition placeholder:text-[var(--ink-faint)] focus:border-ucu-blue focus:ring-2 focus:ring-ucu-blue/15;
+  }
+
+  .ucu-tag {
+    @apply inline-flex rounded-md bg-[var(--surface-muted)] px-2.5 py-0.5 font-display text-xs font-semibold text-ucu-blue;
+  }
+
+  .ucu-accent-top {
+    @apply relative overflow-hidden;
+  }
+
+  .ucu-accent-top::before {
+    content: '';
+    @apply absolute inset-x-0 top-0 h-1 ucu-brand-bar;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes ucu-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .ucu-animate-in {
+    animation: ucu-fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .ucu-animate-in-delay-1 { animation-delay: 0.08s; }
+  .ucu-animate-in-delay-2 { animation-delay: 0.16s; }
+  .ucu-animate-in-delay-3 { animation-delay: 0.24s; }
+}

@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /posts/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /pages/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /categories/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /tags/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /authors/{login} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /media/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /comments/{id} {
+      allow read: if false;
+      allow write: if false;
+    }
+    match /migration_meta/{doc} {
+      allow read, write: if false;
+    }
+    match /fallos/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_rubros/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_provincias/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_ciudades/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_juzgados/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_tipos_juicio/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_reclamos/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_etiquetas/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_empresas/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /observatorio_divisas/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /reclamos/{id} {
+      allow read: if false;
+      allow write: if false;
+    }
+    match /reclamos_estados/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /reclamos_grupos_estados/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /reclamos_provincias/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /reclamos_ciudades/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /reclamos_rubros/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /reclamos_empresas/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /admin_users/{id} {
+      allow read, write: if false;
+    }
+  }
+}
