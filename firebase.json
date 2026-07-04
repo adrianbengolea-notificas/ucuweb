@@ -1,0 +1,29 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": [
+    {
+      "bucket": "ucuweb-2887d.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
+  "apphosting": [
+    {
+      "backendId": "ucu-staging",
+      "source": ".",
+      "config": "apphosting.yaml",
+      "alwaysDeployFromSource": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".next",
+        "imports",
+        "legacy",
+        "scripts",
+        "terminals"
+      ]
+    }
+  ]
+}
