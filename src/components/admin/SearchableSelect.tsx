@@ -66,12 +66,12 @@ export function SearchableSelect({
   }
 
   return (
-    <div ref={containerRef} className="block">
+    <div ref={containerRef} className="block min-w-0 w-full max-w-full">
       <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
 
       {selected ? (
-        <div className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-[#1a5fb4]/20 bg-[#eef5ff] px-3 py-2 text-sm text-[#1a5fb4]">
-          <span>{selected.label}</span>
+        <div className="mb-2 flex min-w-0 items-start justify-between gap-2 rounded-lg border border-[#1a5fb4]/20 bg-[#eef5ff] px-3 py-2 text-sm text-[#1a5fb4]">
+          <span className="min-w-0 truncate">{selected.label}</span>
           {!disabled ? (
             <button
               type="button"
@@ -85,7 +85,7 @@ export function SearchableSelect({
         </div>
       ) : null}
 
-      <div className="relative">
+      <div className="relative min-w-0">
         <input
           type="text"
           value={query}
@@ -96,11 +96,11 @@ export function SearchableSelect({
           }}
           onFocus={() => setOpen(true)}
           placeholder={selected ? 'Buscar otro…' : placeholder}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#1a5fb4] disabled:bg-slate-50"
+          className="w-full min-w-0 max-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#1a5fb4] disabled:bg-slate-50"
         />
 
         {showDropdown ? (
-          <ul className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <ul className="absolute left-0 right-0 z-20 mt-1 max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
             {filtered.map((option) => (
               <li key={option.value}>
                 <button
@@ -188,11 +188,11 @@ export function SearchableMultiSelect({
     .filter(Boolean) as SelectOption[];
 
   return (
-    <div ref={containerRef} className="block">
+    <div ref={containerRef} className="block min-w-0 w-full max-w-full">
       <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
 
       {selectedOptions.length ? (
-        <div className="mb-2 flex flex-wrap gap-2">
+        <div className="mb-2 flex min-w-0 flex-wrap gap-2">
           {selectedOptions.map((option) => (
             <span
               key={option.value}
@@ -214,7 +214,7 @@ export function SearchableMultiSelect({
         <p className="mb-2 text-xs text-slate-400">Ninguno seleccionado</p>
       )}
 
-      <div className="relative">
+      <div className="relative min-w-0">
         <input
           type="text"
           value={query}
@@ -224,11 +224,11 @@ export function SearchableMultiSelect({
           }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#1a5fb4]"
+          className="w-full min-w-0 max-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#1a5fb4]"
         />
 
         {showDropdown ? (
-          <ul className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <ul className="absolute left-0 right-0 z-20 mt-1 max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
             {filtered.map((option) => {
               const isSelected = values.includes(option.value);
               return (

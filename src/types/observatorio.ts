@@ -65,14 +65,14 @@ export type FalloSearchParams = {
   page?: number;
   offset?: number;
   actor?: string;
-  rubro?: number;
+  rubro?: number[];
   tipoJuicio?: number;
-  causas?: number;
-  etiquetas?: number;
+  causas?: number[];
+  etiquetas?: number[];
   idProvincia?: number;
   idCiudad?: number;
   idTribunal?: number;
-  demandado?: number;
+  demandado?: number[];
 };
 
 export type RubroOption = { id: number; rubro: string };

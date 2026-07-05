@@ -1,6 +1,8 @@
-const MOJIBAKE_PATTERN = /(?:Ã.|ã.|â€.|ï¿½)/;
+const MOJIBAKE_PATTERN = /(?:Ã.|Â.|ã.|â€.|ï¿½)/;
 
 const MOJIBAKE_REPLACEMENTS: [string, string][] = [
+  ['Â°', '°'],
+  ['Âº', 'º'],
   ['Ã¡', 'á'],
   ['Ã©', 'é'],
   ['Ã­', 'í'],

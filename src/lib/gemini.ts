@@ -29,7 +29,7 @@ type GeminiPart =
 async function callGeminiParts(
   systemInstruction: string,
   parts: GeminiPart[],
-  options?: { json?: boolean }
+  options?: { json?: boolean; temperature?: number }
 ): Promise<string> {
   const apiKey = requireGeminiApiKey();
 
@@ -37,7 +37,7 @@ async function callGeminiParts(
     systemInstruction: { parts: [{ text: systemInstruction }] as GeminiPart[] },
     contents: [{ role: 'user', parts }],
     generationConfig: {
-      temperature: options?.json ? 0.2 : 0.4,
+      temperature: options?.temperature ?? (options?.json ? 0.2 : 0.4),
       ...(options?.json ? { responseMimeType: 'application/json' } : {}),
     },
   };
@@ -90,8 +90,91 @@ export type FalloAiRawExtraction = {
   patrimonial: string | null;
   divisaCodigo: string | null;
   resumen: string;
+  dispositiva: string | null;
+  hayResolucionSustantiva: boolean;
   pendienteManual: string[];
 };
+
+export type FalloResumenExtraction = {
+  resumen: string;
+  dispositiva: string | null;
+  hayResolucionSustantiva: boolean;
+};
+
+export async function extractFalloResumenFromPdf(
+  pdfBase64: string,
+  context?: {
+    actor?: string | null;
+    demandado?: string | null;
+    juzgado?: string | null;
+  }
+): Promise<FalloResumenExtraction> {
+  const system = `Sos redactor del Observatorio de Fallos de UCU (defensa del consumidor, Argentina).
+Tu ÚNICA tarea: redactar el resumen de lo que RESOLVIÓ el tribunal en el PDF.
+
+PASO 1: Localizá la dispositiva — secciones RESUELVE, FALLO, DISPONE, Por ello, VISTOS y CONSIDERANDO (solo la parte que lleva a la decisión).
+PASO 2: Redactá el resumen SOLO a partir de esa resolución.
+
+El resumen DEBE:
+- Decir QUÉ decidió el juez (hizo lugar, rechazó, ordenó cobertura, condenó, declaró, etc.)
+- Incluir el fundamento sustantivo en una frase (derecho a la salud, Ley 24.240, cláusula abusiva, etc.)
+- Máximo 400 caracteres
+- Empezar con la decisión, NO con el nombre del juzgado ni del actor
+
+PROHIBIDO en el resumen (nunca uses estas ideas):
+- "tuvo por presentada", "inició la acción", "imprimió trámite", "trámite sumarísimo"
+- "correr traslado", "corrió traslado", "traslado de la demanda"
+- "pase a despacho", "para resolver la medida cautelar solicitada" (si eso es TODO lo que hay)
+- narrar pasos de apertura del expediente sin decisión de fondo
+- abrir con "El Juzgado Federal de..."
+
+Si el documento SOLO contiene órdenes de trámite y NO hay resolución sobre el fondo ni sobre cautelar:
+- hayResolucionSustantiva: false
+- resumen: "Sin resolución sustantiva en este documento: solo constan órdenes de trámite." (o similar, breve y honesto)
+
+Si SÍ hay resolución (incluso cautelar):
+- hayResolucionSustantiva: true
+- resumen: la decisión concreta + fundamento
+
+Ejemplo MALO: "El Juzgado Federal de Rosario 2 tuvo por presentada a la actora, inició el amparo contra OSDE y ordenó correr traslado por cinco días."
+Ejemplo BUENO: "Se ordenó a OSDE cubrir el medicamento al 100% en forma cautelar, por verosimilitud del derecho a la salud ante el rechazo de cobertura."
+Ejemplo si solo hay trámite: "Sin resolución sustantiva: el tribunal ordenó traslado a la demandada y reservó la cautelar para despacho."
+
+Respondé SOLO JSON válido.`;
+
+  const contextLines = [
+    context?.actor ? `Actor: ${context.actor}` : null,
+    context?.demandado ? `Demandado: ${context.demandado}` : null,
+    context?.juzgado ? `Tribunal: ${context.juzgado}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const userPrompt = `Leé el PDF y redactá el resumen según la dispositiva del fallo.
+${contextLines ? `\nContexto (no repetir como apertura del resumen):\n${contextLines}\n` : ''}
+JSON:
+{
+  "dispositiva": "texto breve de lo resuelto o null si no hay",
+  "hayResolucionSustantiva": true,
+  "resumen": "máx. 400 caracteres"
+}`;
+
+  const raw = await callGeminiParts(
+    system,
+    [
+      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+      { text: userPrompt },
+    ],
+    { json: true, temperature: 0.1 }
+  );
+
+  const parsed = JSON.parse(raw) as Partial<FalloResumenExtraction>;
+  return {
+    resumen: String(parsed.resumen ?? '').trim(),
+    dispositiva: parsed.dispositiva ? String(parsed.dispositiva).trim() : null,
+    hayResolucionSustantiva: parsed.hayResolucionSustantiva !== false,
+  };
+}
 
 export async function extractFalloFromPdf(
   pdfBase64: string,
@@ -113,7 +196,19 @@ Reglas:
 - Montos en formato decimal con punto (ej. "15000.00"); si no hay monto, null.
 - fecha en formato DD/MM/AAAA si se puede determinar.
 - rubros, causas, etiquetas y tipoJuicio: usá nombres del catálogo provisto cuando correspondan; si no hay match claro, proponé el más cercano o dejá vacío.
-- resumen: OBLIGATORIO. Máximo 400 caracteres. Debe ir al centro de la decisión, al corazón del caso: qué se decidió, por qué importa para el consumidor, sin abrir con fórmulas procesales ni citas extensas. Tono claro y directo.
+- resumen: OBLIGATORIO. Máximo 400 caracteres. Es el campo más importante.
+  * DEBE describir QUÉ RESOLVIÓ el tribunal (dispositiva: hizo lugar, rechazó, ordenó, condenó, declaró, etc.) y POR QUÉ (fundamentos jurídicos sustantivos en una frase: ley aplicada, derecho invocado, razón de la decisión).
+  * PROHIBIDO narrar el trámite procesal: no menciones "se inició la acción", "aceptó la presentación", "ordenó tramitar", "dispuso traslado", "corrió vista", "se reservó para más adelante", tipo de juicio como hecho principal, ni nombres de juzgado/actor como apertura.
+  * Buscá primero el bloque RESUELVE / FALLO / DISPONE / Por ello / Considerando del documento y resumí ESO.
+  * Si solo hay medida cautelar o resolución interlocutoria, resumí esa resolución concreta y su fundamento, no el escrito de inicio.
+  * Si el documento no contiene resolución sustantiva aún, indicá en pendienteManual "resumen: sin dispositiva en el PDF" y redactá lo más cercano a una resolución que figure.
+  * Ejemplo MALO: "Se inició amparo contra OSDE, el juzgado aceptó la demanda y ordenó traslado por 5 días."
+  * Ejemplo BUENO: "Se ordenó a OSDE cubrir el medicamento al 100% en forma cautelar, por verosimilitud del derecho a la salud ante el rechazo de cobertura del tratamiento prescrito."
+- provincia / jurisdicción:
+  * Si el tribunal es Juzgado Federal, Cámara Federal, Tribunal Federal o similar → provincia del catálogo: "Justicia Federal" (NO uses la provincia geográfica como Santa Fe o Buenos Aires).
+  * Si es Justicia Nacional o Juzgado Nacional → provincia del catálogo: "Justicia Nacional".
+  * La ciudad puede ser la sede del juzgado (ej. Rosario, San Nicolás) aunque la provincia sea Justicia Federal.
+  * En "juzgado" devolvé el nombre completo del tribunal tal como figura en el documento.
 - pendienteManual: lista breve de campos que no pudiste completar con certeza.
 Respondé SOLO JSON válido.`;
 
@@ -140,14 +235,16 @@ Forma JSON:
   "rubros": ["..."],
   "causas": ["..."],
   "etiquetas": ["..."],
-  "provincia": "nombre o null",
-  "ciudad": "nombre o null",
-  "juzgado": "nombre del tribunal o null",
+  "provincia": "nombre del catálogo; Justicia Federal o Justicia Nacional si corresponde, o provincia geográfica",
+  "ciudad": "sede/ciudad del tribunal (ej. Rosario) o null",
+  "juzgado": "nombre completo del tribunal o null",
   "punitivo": "0.00 o null",
   "moral": "0.00 o null",
   "patrimonial": "0.00 o null",
   "divisaCodigo": "ARS u otro código o null",
-  "resumen": "máximo 400 caracteres, corazón del caso",
+  "dispositiva": "texto breve de la resolución/dispositiva o null",
+  "hayResolucionSustantiva": true,
+  "resumen": "borrador breve; será refinado en paso aparte",
   "pendienteManual": ["campo X: motivo"]
 }`;
 
@@ -183,6 +280,8 @@ Forma JSON:
     patrimonial: parsed.patrimonial ?? null,
     divisaCodigo: parsed.divisaCodigo ?? null,
     resumen: String(parsed.resumen ?? '').trim(),
+    dispositiva: parsed.dispositiva ? String(parsed.dispositiva).trim() : null,
+    hayResolucionSustantiva: parsed.hayResolucionSustantiva !== false,
     pendienteManual: Array.isArray(parsed.pendienteManual)
       ? parsed.pendienteManual.map(String)
       : [],

@@ -5,9 +5,17 @@ import { FileUp, Loader2, Sparkles } from 'lucide-react';
 import type { FalloAiExtractedForm } from '@/types/fallo-ai';
 
 type FalloAiImportProps = {
-  onExtracted: (result: { form: FalloAiExtractedForm; warnings: string[] }) => void;
+  onExtracted: (result: {
+    form: FalloAiExtractedForm;
+    warnings: string[];
+    pdf: File;
+  }) => void;
   disabled?: boolean;
 };
+
+function isPdfFile(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+}
 
 export function FalloAiImport({ onExtracted, disabled }: FalloAiImportProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -15,6 +23,9 @@ export function FalloAiImport({ onExtracted, disabled }: FalloAiImportProps) {
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+
+  const canUpload = !disabled && !extracting && geminiConfigured !== false;
 
   const loadMeta = useCallback(async () => {
     try {
@@ -30,34 +41,72 @@ export function FalloAiImport({ onExtracted, disabled }: FalloAiImportProps) {
     loadMeta();
   }, [loadMeta]);
 
-  async function handleFile(file: File | null) {
-    if (!file || disabled || extracting) return;
+  const handleFile = useCallback(
+    async (file: File | null) => {
+      if (!file || !canUpload) return;
 
-    setError('');
-    setFileName(file.name);
-    setExtracting(true);
+      if (!isPdfFile(file)) {
+        setError('Solo se aceptan archivos PDF');
+        return;
+      }
 
-    try {
-      const body = new FormData();
-      body.append('pdf', file);
+      setError('');
+      setFileName(file.name);
+      setExtracting(true);
 
-      const res = await fetch('/api/admin/fallos/ai-extract', {
-        method: 'POST',
-        credentials: 'include',
-        body,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      try {
+        const body = new FormData();
+        body.append('pdf', file);
 
-      onExtracted({
-        form: data.form as FalloAiExtractedForm,
-        warnings: Array.isArray(data.warnings) ? data.warnings : [],
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo analizar el PDF');
-    } finally {
-      setExtracting(false);
-    }
+        const res = await fetch('/api/admin/fallos/ai-extract', {
+          method: 'POST',
+          credentials: 'include',
+          body,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+
+        onExtracted({
+          form: data.form as FalloAiExtractedForm,
+          warnings: Array.isArray(data.warnings) ? data.warnings : [],
+          pdf: file,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo analizar el PDF');
+      } finally {
+        setExtracting(false);
+      }
+    },
+    [canUpload, onExtracted]
+  );
+
+  function handleDragEnter(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (canUpload) setDragActive(true);
+  }
+
+  function handleDragLeave(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+    setDragActive(false);
+  }
+
+  function handleDragOver(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (canUpload) event.dataTransfer.dropEffect = 'copy';
+  }
+
+  function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+    if (!canUpload) return;
+
+    const file = event.dataTransfer.files?.[0] ?? null;
+    void handleFile(file);
   }
 
   return (
@@ -69,8 +118,9 @@ export function FalloAiImport({ onExtracted, disabled }: FalloAiImportProps) {
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-slate-900">Cargar con IA desde PDF</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Subí la sentencia en PDF. La IA completa el formulario y redacta un resumen de hasta 400
-            caracteres al centro de la decisión. Revisá y terminá manualmente lo que falte.
+            Arrastrá la sentencia en PDF o seleccioná el archivo. La IA completa el formulario; el
+            resumen destaca qué resolvió el tribunal y sus fundamentos. El PDF queda asociado al
+            guardar.
           </p>
           {geminiConfigured === false ? (
             <p className="mt-2 text-sm font-medium text-red-700">
@@ -80,28 +130,56 @@ export function FalloAiImport({ onExtracted, disabled }: FalloAiImportProps) {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        className={`mt-4 rounded-xl border-2 border-dashed p-6 transition ${
+          dragActive
+            ? 'border-[#1a5fb4] bg-[#1a5fb4]/5'
+            : 'border-sky-300 bg-white/70'
+        } ${canUpload ? 'cursor-pointer' : 'opacity-60'}`}
+        onClick={() => canUpload && inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && canUpload) {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={canUpload ? 0 : -1}
+        aria-label="Zona para arrastrar o seleccionar PDF"
+      >
         <input
           ref={inputRef}
           type="file"
           accept="application/pdf,.pdf"
           className="hidden"
-          onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
         />
-        <button
-          type="button"
-          disabled={disabled || extracting || geminiConfigured === false}
-          onClick={() => inputRef.current?.click()}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#1a5fb4] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#134a8c] disabled:opacity-60"
-        >
+
+        <div className="flex flex-col items-center justify-center gap-3 text-center sm:flex-row sm:text-left">
           {extracting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-8 w-8 animate-spin text-[#1a5fb4]" />
           ) : (
-            <FileUp className="h-4 w-4" />
+            <FileUp className="h-8 w-8 text-[#1a5fb4]" />
           )}
-          {extracting ? 'Analizando PDF…' : 'Seleccionar PDF'}
-        </button>
-        {fileName ? <span className="text-sm text-slate-600">{fileName}</span> : null}
+          <div>
+            <p className="text-sm font-semibold text-slate-800">
+              {extracting
+                ? 'Analizando PDF…'
+                : dragActive
+                  ? 'Soltá el PDF acá'
+                  : 'Arrastrá el PDF acá o hacé clic para elegir'}
+            </p>
+            {fileName ? (
+              <p className="mt-1 text-sm text-slate-600">{fileName}</p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-500">Solo archivos PDF, hasta 12 MB</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {error ? (
