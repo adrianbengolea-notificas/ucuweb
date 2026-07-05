@@ -1,8 +1,10 @@
 /** Mantener en sync con src/lib/fix-encoding.ts */
 
-const MOJIBAKE_PATTERN = /(?:Ã.|ã.|â€.|ï¿½)/;
+const MOJIBAKE_PATTERN = /(?:Ã.|Â.|ã.|â€.|ï¿½)/;
 
 const MOJIBAKE_REPLACEMENTS = [
+  ['Â°', '°'],
+  ['Âº', 'º'],
   ['Ã¡', 'á'],
   ['Ã©', 'é'],
   ['Ã­', 'í'],

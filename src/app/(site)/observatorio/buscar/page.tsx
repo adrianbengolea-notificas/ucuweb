@@ -54,10 +54,12 @@ export default async function ObservatorioBuscarPage({
         ) : null}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
-        <FalloSearchForm initialParams={filters} />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <FalloSearchForm initialParams={filters} />
+        </div>
 
-        <div>
+        <div className="min-w-0">
           {error ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
               {error}

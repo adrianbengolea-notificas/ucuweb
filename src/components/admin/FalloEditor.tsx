@@ -140,6 +140,7 @@ export function FalloEditor({
   const [newEmpresa, setNewEmpresa] = useState('');
   const [newEtiqueta, setNewEtiqueta] = useState('');
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  const [pendingPdf, setPendingPdf] = useState<File | null>(null);
 
   async function applyAiExtractedForm(extracted: FalloAiExtractedForm) {
     setError('');
@@ -405,12 +406,26 @@ export function FalloEditor({
     const method = mode === 'create' ? 'POST' : 'PUT';
 
     try {
-      const response = await fetch(url, {
-        method,
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let response: Response;
+
+      if (!isPublic && mode === 'create' && pendingPdf) {
+        const body = new FormData();
+        body.append('payload', JSON.stringify(payload));
+        body.append('pdf', pendingPdf);
+        response = await fetch(url, {
+          method,
+          credentials: 'include',
+          body,
+        });
+      } else {
+        response = await fetch(url, {
+          method,
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+
       const data = await response.json();
       if (!response.ok) {
         setError(data.error || 'Error al guardar');
@@ -451,11 +466,19 @@ export function FalloEditor({
       {!isPublic && mode === 'create' ? (
         <FalloAiImport
           disabled={loading}
-          onExtracted={({ form: extracted, warnings }) => {
+          onExtracted={({ form: extracted, warnings, pdf }) => {
             setAiWarnings(warnings);
+            setPendingPdf(pdf);
             void applyAiExtractedForm(extracted);
           }}
         />
+      ) : null}
+
+      {pendingPdf ? (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+          <span className="font-semibold">PDF asociado:</span> {pendingPdf.name} — se guardará con el
+          fallo al crear.
+        </div>
       ) : null}
 
       {aiWarnings.length ? (
@@ -692,8 +715,8 @@ export function FalloEditor({
           />
           {!isPublic ? (
             <p className="mt-1 text-xs text-slate-500">
-              La IA redacta hasta 400 caracteres al centro de la decisión. Podés ajustarlo antes de
-              publicar.
+              Debe sintetizar la resolución y sus fundamentos (qué decidió el juez y por qué), no el
+              trámite procesal. Máximo 400 caracteres.
             </p>
           ) : null}
         </label>

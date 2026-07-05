@@ -33,12 +33,21 @@ export function getObservatorioApiUrl(): string {
   return (process.env.OBSERVATORIO_API_URL ?? DEFAULT_API_URL).replace(/\/$/, '');
 }
 
-function buildQuery(params: Record<string, string | number | undefined>): string {
+function buildQuery(
+  params: Record<string, string | number | number[] | undefined>
+): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== '') {
-      query.set(key, String(value));
+    if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null) {
+          query.append(key, String(item));
+        }
+      }
+      continue;
     }
+    query.set(key, String(value));
   }
   const serialized = query.toString();
   return serialized ? `?${serialized}` : '';
@@ -46,7 +55,7 @@ function buildQuery(params: Record<string, string | number | undefined>): string
 
 async function observatorioFetch<T>(
   path: string,
-  params?: Record<string, string | number | undefined>,
+  params?: Record<string, string | number | number[] | undefined>,
   revalidate = 300
 ): Promise<T> {
   const base = getObservatorioApiUrl();
@@ -212,42 +221,44 @@ export function parseSearchParams(
     return Number.isFinite(parsed) ? parsed : undefined;
   };
 
+  const readNumberArray = (key: string) => {
+    const value = searchParams[key];
+    const values = Array.isArray(value) ? value : value ? [value] : [];
+    const parsed = values
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item));
+    return parsed.length ? parsed : undefined;
+  };
+
   return {
     page: readNumber('page') ?? 1,
     offset: readNumber('offset') ?? 10,
     actor: read('actor')?.trim() || undefined,
-    rubro: readNumber('rubro'),
+    rubro: readNumberArray('rubro'),
     tipoJuicio: readNumber('tipoJuicio'),
-    causas: readNumber('causas'),
-    etiquetas: readNumber('etiquetas'),
+    causas: readNumberArray('causas'),
+    etiquetas: readNumberArray('etiquetas'),
     idProvincia: readNumber('idProvincia'),
     idCiudad: readNumber('idCiudad'),
     idTribunal: readNumber('idTribunal'),
-    demandado: readNumber('demandado'),
+    demandado: readNumberArray('demandado'),
   };
 }
 
 export function buildSearchQuery(params: FalloSearchParams): string {
   const query = new URLSearchParams();
-  const entries: [keyof FalloSearchParams, string | number | undefined][] = [
-    ['page', params.page && params.page > 1 ? params.page : undefined],
-    ['offset', params.offset && params.offset !== 10 ? params.offset : undefined],
-    ['actor', params.actor],
-    ['rubro', params.rubro],
-    ['tipoJuicio', params.tipoJuicio],
-    ['causas', params.causas],
-    ['etiquetas', params.etiquetas],
-    ['idProvincia', params.idProvincia],
-    ['idCiudad', params.idCiudad],
-    ['idTribunal', params.idTribunal],
-    ['demandado', params.demandado],
-  ];
 
-  for (const [key, value] of entries) {
-    if (value !== undefined && value !== null && value !== '') {
-      query.set(key, String(value));
-    }
-  }
+  if (params.page && params.page > 1) query.set('page', String(params.page));
+  if (params.offset && params.offset !== 10) query.set('offset', String(params.offset));
+  if (params.actor) query.set('actor', params.actor);
+  for (const id of params.rubro ?? []) query.append('rubro', String(id));
+  if (params.tipoJuicio) query.set('tipoJuicio', String(params.tipoJuicio));
+  for (const id of params.causas ?? []) query.append('causas', String(id));
+  for (const id of params.etiquetas ?? []) query.append('etiquetas', String(id));
+  if (params.idProvincia) query.set('idProvincia', String(params.idProvincia));
+  if (params.idCiudad) query.set('idCiudad', String(params.idCiudad));
+  if (params.idTribunal) query.set('idTribunal', String(params.idTribunal));
+  for (const id of params.demandado ?? []) query.append('demandado', String(id));
 
   const serialized = query.toString();
   return serialized ? `?${serialized}` : '';

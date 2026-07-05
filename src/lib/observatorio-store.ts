@@ -63,17 +63,23 @@ function applyFilters(items: StoredFalloDocument[], params: FalloSearchParams): 
     const query = params.actor.trim().toLowerCase();
     filtered = filtered.filter((item) => item.actorSearch.includes(query));
   }
-  if (params.rubro) {
-    filtered = filtered.filter((item) => item.rubroIds.includes(params.rubro!));
+  if (params.rubro?.length) {
+    filtered = filtered.filter((item) =>
+      params.rubro!.some((id) => item.rubroIds.includes(id))
+    );
   }
   if (params.tipoJuicio) {
     filtered = filtered.filter((item) => item.tipoJuicioId === params.tipoJuicio);
   }
-  if (params.causas) {
-    filtered = filtered.filter((item) => item.causaIds.includes(params.causas!));
+  if (params.causas?.length) {
+    filtered = filtered.filter((item) =>
+      params.causas!.some((id) => item.causaIds.includes(id))
+    );
   }
-  if (params.etiquetas) {
-    filtered = filtered.filter((item) => item.etiquetaIds.includes(params.etiquetas!));
+  if (params.etiquetas?.length) {
+    filtered = filtered.filter((item) =>
+      params.etiquetas!.some((id) => item.etiquetaIds.includes(id))
+    );
   }
   if (params.idProvincia) {
     filtered = filtered.filter((item) => item.provinciaId === params.idProvincia);
@@ -84,8 +90,10 @@ function applyFilters(items: StoredFalloDocument[], params: FalloSearchParams): 
   if (params.idTribunal) {
     filtered = filtered.filter((item) => item.juzgadoId === params.idTribunal);
   }
-  if (params.demandado) {
-    filtered = filtered.filter((item) => item.demandadoEmpresaIds.includes(params.demandado!));
+  if (params.demandado?.length) {
+    filtered = filtered.filter((item) =>
+      params.demandado!.some((id) => item.demandadoEmpresaIds.includes(id))
+    );
   }
 
   return filtered;

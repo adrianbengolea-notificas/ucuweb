@@ -11,12 +11,43 @@ import {
   getRubrosFromFirestore,
   getTiposJuicioFromFirestore,
 } from '@/lib/observatorio-store';
-import { extractFalloFromPdf } from '@/lib/gemini';
+import { extractFalloFromPdf, extractFalloResumenFromPdf, type FalloAiRawExtraction } from '@/lib/gemini';
 import type { FalloAiExtractedForm, FalloAiExtractResult } from '@/types/fallo-ai';
+import type { ProvinciaOption } from '@/types/observatorio';
 
 export type { FalloAiExtractedForm, FalloAiExtractResult };
 
 const RESUMEN_MAX = 400;
+
+const PROCEDURAL_RESUMEN_PATTERNS = [
+  /se inici[oó]/i,
+  /inici[oó]\s+(la\s+)?acci[oó]n/i,
+  /orden[oó] tramitar/i,
+  /imprim[ió]\s+tr[aá]mite/i,
+  /tr[aá]mite\s+sumar[ií]simo/i,
+  /dispuso traslado/i,
+  /corri[oó]\s+traslado/i,
+  /correr traslado/i,
+  /traslado de la demanda/i,
+  /corri[oó] vista/i,
+  /se reserv[oó]/i,
+  /pase a despacho/i,
+  /tuvo por presentad/i,
+  /acept[oó] la presentaci[oó]n/i,
+  /tramitar el caso/i,
+  /^el juzgado/i,
+  /^el tribunal/i,
+];
+
+function resumenSoundsProcedural(resumen: string): boolean {
+  return PROCEDURAL_RESUMEN_PATTERNS.some((pattern) => pattern.test(resumen));
+}
+
+function needsResumenRetry(resumen: string, hayResolucionSustantiva: boolean): boolean {
+  if (!resumen.trim()) return true;
+  if (!hayResolucionSustantiva) return true;
+  return resumenSoundsProcedural(resumen);
+}
 
 function normalizeText(value: string): string {
   return value
@@ -70,6 +101,86 @@ function matchMany<T extends { id: number }>(
   }
 
   return { ids, unmatched };
+}
+
+function findProvinciaContaining(
+  provincias: ProvinciaOption[],
+  fragment: string
+): ProvinciaOption | null {
+  const q = normalizeText(fragment);
+  if (!q) return null;
+  return provincias.find((item) => normalizeText(item.nombre).includes(q)) ?? null;
+}
+
+function jurisdictionContext(raw: FalloAiRawExtraction): string {
+  return [raw.juzgado, raw.provincia, raw.ciudad].filter(Boolean).join(' ');
+}
+
+function isFederalJurisdiction(text: string): boolean {
+  const n = normalizeText(text);
+  return (
+    n.includes('juzgado federal') ||
+    n.includes('justicia federal') ||
+    n.includes('camara federal') ||
+    n.includes('corte federal') ||
+    n.includes('tribunal federal') ||
+    n.includes('fuero federal')
+  );
+}
+
+function isNacionalJurisdiction(text: string): boolean {
+  const n = normalizeText(text);
+  return (
+    n.includes('justicia nacional') ||
+    n.includes('juzgado nacional') ||
+    n.includes('camara nacional') ||
+    n.includes('tribunal nacional') ||
+    n.includes('fuero nacional')
+  );
+}
+
+function resolveProvincia(
+  raw: FalloAiRawExtraction,
+  provincias: ProvinciaOption[]
+): ProvinciaOption | null {
+  const context = jurisdictionContext(raw);
+
+  if (isFederalJurisdiction(context)) {
+    return findProvinciaContaining(provincias, 'justicia federal');
+  }
+  if (isNacionalJurisdiction(context)) {
+    return findProvinciaContaining(provincias, 'justicia nacional');
+  }
+
+  const fromAi = findBestMatch(raw.provincia, provincias, (p) => p.nombre);
+  if (fromAi) return fromAi;
+
+  if (raw.provincia) {
+    const normalizedAi = normalizeText(raw.provincia);
+    if (normalizedAi.includes('federal')) {
+      return findProvinciaContaining(provincias, 'justicia federal');
+    }
+    if (normalizedAi.includes('nacional')) {
+      return findProvinciaContaining(provincias, 'justicia nacional');
+    }
+  }
+
+  return null;
+}
+
+function extractCityFromJuzgado(juzgado: string | null | undefined): string | null {
+  const text = String(juzgado ?? '').trim();
+  if (!text) return null;
+
+  const deMatch = text.match(
+    /(?:juzgado|tribunal|camara|cámara)\s+(?:federal|nacional)\s+(?:de|del)\s+([^,\d\-–]+)/i
+  );
+  if (deMatch?.[1]) return deMatch[1].trim();
+
+  const dashMatch = text.match(/[-–]\s*([^,\d]+)$/);
+  if (dashMatch?.[1]) return dashMatch[1].trim();
+
+  return null;
 }
 
 function formatAmount(value: string | null | undefined): string {
@@ -131,6 +242,37 @@ export async function extractFalloFormFromPdf(pdfBuffer: Buffer): Promise<FalloA
     divisas: divisas.map((d) => `${d.nombre} (${d.codigo})`),
   });
 
+  const demandadoLabel =
+    raw.demandado ??
+    raw.demandadoEmpresas?.[0] ??
+    raw.actorEmpresas?.[0] ??
+    null;
+
+  let resumenExtraction = await extractFalloResumenFromPdf(pdfBase64, {
+    actor: raw.actor,
+    demandado: demandadoLabel,
+    juzgado: raw.juzgado,
+  });
+
+  let resumen = trimResumen(resumenExtraction.resumen);
+
+  if (needsResumenRetry(resumen, resumenExtraction.hayResolucionSustantiva)) {
+    resumenExtraction = await extractFalloResumenFromPdf(pdfBase64, {
+      actor: raw.actor,
+      demandado: demandadoLabel,
+      juzgado: raw.juzgado,
+    });
+    resumen = trimResumen(resumenExtraction.resumen);
+  }
+
+  if (
+    !resumen &&
+    raw.dispositiva &&
+    !resumenSoundsProcedural(raw.dispositiva)
+  ) {
+    resumen = trimResumen(raw.dispositiva);
+  }
+
   const warnings = [...(raw.pendienteManual ?? [])];
 
   const rubroMatch = matchMany(raw.rubros ?? [], rubros, (r) => r.rubro);
@@ -166,18 +308,25 @@ export async function extractFalloFormFromPdf(pdfBuffer: Buffer): Promise<FalloA
     warnings.push(`Tipo de juicio no encontrado: ${raw.tipoJuicio}`);
   }
 
-  const provincia = findBestMatch(raw.provincia, provincias, (p) => p.nombre);
-  if (raw.provincia && !provincia) {
-    warnings.push(`Provincia no encontrada: ${raw.provincia}`);
+  const provincia = resolveProvincia(raw, provincias);
+  if (!provincia) {
+    if (raw.provincia) {
+      warnings.push(`Provincia no encontrada: ${raw.provincia}`);
+    } else if (isFederalJurisdiction(jurisdictionContext(raw))) {
+      warnings.push('Provincia "Justicia Federal" no encontrada en el catálogo');
+    } else if (isNacionalJurisdiction(jurisdictionContext(raw))) {
+      warnings.push('Provincia "Justicia Nacional" no encontrada en el catálogo');
+    }
   }
 
   let ciudadId = '';
   let juzgadoId = '';
   if (provincia) {
     const ciudades = await getCiudadesFromFirestore(provincia.id);
-    const ciudad = findBestMatch(raw.ciudad, ciudades, (c) => c.nombre);
-    if (raw.ciudad && !ciudad) {
-      warnings.push(`Ciudad no encontrada: ${raw.ciudad}`);
+    const ciudadQuery = raw.ciudad?.trim() || extractCityFromJuzgado(raw.juzgado);
+    const ciudad = findBestMatch(ciudadQuery, ciudades, (c) => c.nombre);
+    if (ciudadQuery && !ciudad) {
+      warnings.push(`Ciudad no encontrada: ${ciudadQuery}`);
     }
     if (ciudad) {
       ciudadId = String(ciudad.id);
@@ -186,10 +335,34 @@ export async function extractFalloFormFromPdf(pdfBuffer: Buffer): Promise<FalloA
       if (juzgado) {
         juzgadoId = String(juzgado.id);
       } else if (raw.juzgado) {
-        warnings.push(`Tribunal no encontrado: ${raw.juzgado}`);
+        const juzgadosEnProvincia = (
+          await Promise.all(ciudades.map((c) => getJuzgadosFromFirestore(c.id)))
+        ).flat();
+        const juzgadoEnProvincia = findBestMatch(
+          raw.juzgado,
+          juzgadosEnProvincia,
+          (j) => j.nombre
+        );
+        if (juzgadoEnProvincia) {
+          juzgadoId = String(juzgadoEnProvincia.id);
+          const ciudadDelJuzgado = ciudades.find((c) => c.id === juzgadoEnProvincia.idCiudad);
+          if (ciudadDelJuzgado) ciudadId = String(ciudadDelJuzgado.id);
+        } else {
+          warnings.push(`Tribunal no encontrado: ${raw.juzgado}`);
+        }
       }
     } else if (raw.juzgado) {
-      warnings.push(`Tribunal (completar manualmente): ${raw.juzgado}`);
+      const juzgadosEnProvincia = (
+        await Promise.all(ciudades.map((c) => getJuzgadosFromFirestore(c.id)))
+      ).flat();
+      const juzgadoEnProvincia = findBestMatch(raw.juzgado, juzgadosEnProvincia, (j) => j.nombre);
+      if (juzgadoEnProvincia) {
+        juzgadoId = String(juzgadoEnProvincia.id);
+        const ciudadDelJuzgado = ciudades.find((c) => c.id === juzgadoEnProvincia.idCiudad);
+        if (ciudadDelJuzgado) ciudadId = String(ciudadDelJuzgado.id);
+      } else {
+        warnings.push(`Tribunal (completar manualmente): ${raw.juzgado}`);
+      }
     }
   } else if (raw.juzgado) {
     warnings.push(`Tribunal (completar manualmente): ${raw.juzgado}`);
@@ -208,10 +381,17 @@ export async function extractFalloFormFromPdf(pdfBuffer: Buffer): Promise<FalloA
 
   const firmActor = Boolean(raw.firmActor);
   const personDemandado = Boolean(raw.personDemandado);
-  const resumen = trimResumen(raw.resumen ?? '');
 
   if (!resumen) {
     warnings.push('No se pudo generar el resumen; redactalo manualmente');
+  } else if (!resumenExtraction.hayResolucionSustantiva) {
+    warnings.push(
+      'El PDF parece contener solo trámite procesal, sin resolución sustantiva. Revisá el resumen o cargá la sentencia definitiva'
+    );
+  } else if (resumenSoundsProcedural(resumen)) {
+    warnings.push(
+      'El resumen parece describir trámite procesal; revisalo para destacar qué resolvió el tribunal y sus fundamentos'
+    );
   }
 
   const form: FalloAiExtractedForm = {
