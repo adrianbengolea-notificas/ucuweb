@@ -1,5 +1,9 @@
 const FALLO_FILE_PATH = /^\/observatorio\/fallos\/(\d+)\/([^/?#]+)$/;
 
+export function isFalloPdfFile(filename: string): boolean {
+  return filename.toLowerCase().endsWith('.pdf');
+}
+
 /** Ruta en Firebase Storage: observatorio/fallos/{expediente}/{filename} */
 export function falloStoragePath(expediente: number, filename: string): string {
   return `observatorio/fallos/${expediente}/${filename}`;

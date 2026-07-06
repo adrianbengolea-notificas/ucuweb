@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { FalloPdfViewer } from '@/components/observatorio/FalloPdfViewer';
 import { resolveFalloFileUrl } from '@/lib/fallos-files';
 import { formatDemandado, formatMonto, getFalloById } from '@/lib/observatorio';
 
@@ -38,6 +39,11 @@ export default async function FalloDetailPage({
 
   const demandado = formatDemandado(fallo);
   const monto = formatMonto(fallo);
+  const viewerFiles = fallo.files.map((file) => ({
+    id: file.id,
+    file: file.file,
+    url: resolveFalloFileUrl(file.url, fallo.nroExpediente, file.file),
+  }));
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-10">
@@ -107,27 +113,7 @@ export default async function FalloDetailPage({
           </p>
         </section>
 
-        {fallo.files.length ? (
-          <section className="mt-8 border-t border-slate-200 pt-6">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Documentos
-            </h2>
-            <ul className="space-y-2">
-              {fallo.files.map((file) => (
-                <li key={file.id}>
-                  <a
-                    href={resolveFalloFileUrl(file.url, fallo.nroExpediente, file.file)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-semibold text-[#1a5fb4] hover:underline"
-                  >
-                    {file.file}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        {viewerFiles.length ? <FalloPdfViewer files={viewerFiles} /> : null}
 
         {fallo.etiquetas.length ? (
           <section className="mt-8 border-t border-slate-200 pt-6">
