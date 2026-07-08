@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminPermission } from '@/lib/admin-session';
-import { parseFalloFormPayload, validateFalloFormPayload } from '@/lib/fallo-form-payload';
+import { validateFalloFormPayload } from '@/lib/fallo-form-payload';
+import { readFalloFormBody, validateFalloPdfFile } from '@/lib/fallo-request-body';
 import {
   deleteFalloDocument,
   listAdminFallos,
@@ -10,35 +11,12 @@ import {
 } from '@/lib/observatorio-store';
 import { buildFalloDocumentFromForm } from '@/lib/observatorio-normalize';
 import { uploadFalloPdfToStorage } from '@/lib/fallo-files-server';
+import { assertPdfNotDuplicate } from '@/lib/fallo-pdf-duplicate';
+import { DuplicateFalloPdfError } from '@/lib/fallo-pdf-duplicate-error';
+import { duplicateFalloPdfResponse } from '@/lib/fallo-pdf-duplicate-response';
 
-async function readCreateBody(request: NextRequest): Promise<{
-  payload: ReturnType<typeof parseFalloFormPayload>;
-  pdfFile: File | null;
-}> {
-  const contentType = request.headers.get('content-type') ?? '';
-
-  if (contentType.includes('multipart/form-data')) {
-    const formData = await request.formData();
-    const payloadRaw = formData.get('payload');
-    const pdfEntry = formData.get('pdf');
-
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(String(payloadRaw ?? ''));
-    } catch {
-      return { payload: null, pdfFile: null };
-    }
-
-    const pdfFile =
-      pdfEntry instanceof File && pdfEntry.size > 0 ? pdfEntry : null;
-
-    return { payload: parseFalloFormPayload(parsed), pdfFile };
-  }
-
-  return {
-    payload: parseFalloFormPayload(await request.json()),
-    pdfFile: null,
-  };
+async function readCreateBody(request: NextRequest) {
+  return readFalloFormBody(request);
 }
 
 export async function GET(request: NextRequest) {
@@ -74,8 +52,9 @@ export async function POST(request: NextRequest) {
   }
 
   if (pdfFile) {
-    if (pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
-      return NextResponse.json({ error: 'Solo se aceptan archivos PDF' }, { status: 400 });
+    const pdfError = validateFalloPdfFile(pdfFile);
+    if (pdfError) {
+      return NextResponse.json({ error: pdfError }, { status: 400 });
     }
   }
 
@@ -92,12 +71,14 @@ export async function POST(request: NextRequest) {
 
     if (pdfFile) {
       const buffer = Buffer.from(await pdfFile.arrayBuffer());
+      const pdfHash = await assertPdfNotDuplicate(buffer);
       const fileEntry = await uploadFalloPdfToStorage(
         nroExpediente,
         buffer,
         pdfFile.name
       );
       fallo.files = [fileEntry];
+      fallo.pdfHash = pdfHash;
     }
 
     await saveFalloDocument(fallo);
@@ -108,6 +89,9 @@ export async function POST(request: NextRequest) {
       url: `/observatorio/fallo/${nroExpediente}`,
     });
   } catch (error) {
+    if (error instanceof DuplicateFalloPdfError) {
+      return duplicateFalloPdfResponse(error);
+    }
     console.error(error);
     return NextResponse.json({ error: 'No se pudo crear el fallo' }, { status: 500 });
   }

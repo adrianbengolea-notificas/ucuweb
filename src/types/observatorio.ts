@@ -35,6 +35,7 @@ export type FalloDocument = {
   causas: FalloNamed[];
   etiquetas: FalloNamed[];
   files: FalloFile[];
+  pdfHash?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

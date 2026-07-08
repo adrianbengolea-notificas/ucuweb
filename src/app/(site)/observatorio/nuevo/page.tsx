@@ -27,7 +27,7 @@ export default function ObservatorioNuevoFalloPage() {
         </h1>
         <p className="mt-3 max-w-prose font-serif text-base leading-relaxed text-[var(--ink-muted)]">
           El observatorio es un proyecto comunitario. Podés sumar antecedentes jurisprudenciales sin
-          registrarte ni iniciar sesión.
+          registrarte ni iniciar sesión. Completá los datos del fallo y adjuntá el PDF de la sentencia.
         </p>
       </div>
 

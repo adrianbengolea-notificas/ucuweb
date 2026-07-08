@@ -1,53 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminPermission } from '@/lib/admin-session';
+import { validateFalloFormPayload } from '@/lib/fallo-form-payload';
+import { readFalloFormBody, validateFalloPdfFile } from '@/lib/fallo-request-body';
+import { uploadFalloPdfToStorage } from '@/lib/fallo-files-server';
+import { assertPdfNotDuplicate } from '@/lib/fallo-pdf-duplicate';
+import { DuplicateFalloPdfError } from '@/lib/fallo-pdf-duplicate-error';
+import { duplicateFalloPdfResponse } from '@/lib/fallo-pdf-duplicate-response';
 import { buildFalloDocumentFromForm } from '@/lib/observatorio-normalize';
 import {
   getStoredFalloById,
   loadCatalogLookupsForFallo,
   saveFalloDocument,
 } from '@/lib/observatorio-store';
-import type { FalloFormPayload } from '@/types/observatorio';
 
-function parsePayload(body: unknown): FalloFormPayload | null {
-  if (!body || typeof body !== 'object') return null;
-  const data = body as Record<string, unknown>;
-
-  const readString = (key: string) => String(data[key] ?? '');
-  const readNumberArray = (key: string) =>
-    Array.isArray(data[key])
-      ? data[key].map((value) => Number(value)).filter((value) => Number.isFinite(value))
-      : [];
-  const readNullableNumber = (key: string) => {
-    const value = data[key];
-    if (value == null || value === '') return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const readBool = (key: string) => Boolean(data[key]);
-
-  return {
-    actor: readString('actor'),
-    demandado: readString('demandado'),
-    firmActor: readBool('firmActor'),
-    personDemandado: readBool('personDemandado'),
-    actorEmpresaIds: readNumberArray('actorEmpresaIds'),
-    demandadoEmpresaIds: readNumberArray('demandadoEmpresaIds'),
-    divisaId: readNullableNumber('divisaId'),
-    resumen: readString('resumen'),
-    fecha: readString('fecha'),
-    tipoJuicioId: readNullableNumber('tipoJuicioId'),
-    rubroIds: readNumberArray('rubroIds'),
-    causaIds: readNumberArray('causaIds'),
-    etiquetaIds: readNumberArray('etiquetaIds'),
-    provinciaId: readNullableNumber('provinciaId'),
-    ciudadId: readNullableNumber('ciudadId'),
-    juzgadoId: readNullableNumber('juzgadoId'),
-    punitivo: readString('punitivo') || '0.00',
-    moral: readString('moral') || '0.00',
-    patrimonial: readString('patrimonial') || '0.00',
-    status: data.status === 'draft' ? 'draft' : 'publish',
-  };
+async function readUpdateBody(request: NextRequest) {
+  return readFalloFormBody(request);
 }
 
 export async function GET(
@@ -87,19 +54,21 @@ export async function PUT(
     return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
   }
 
-  const payload = parsePayload(await request.json());
-  if (!payload?.resumen.trim()) {
-    return NextResponse.json({ error: 'El resumen es obligatorio' }, { status: 400 });
+  const { payload, pdfFile } = await readUpdateBody(request);
+  if (!payload) {
+    return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
   }
-  if (payload.firmActor) {
-    if (!payload.actorEmpresaIds.length) {
-      return NextResponse.json(
-        { error: 'Seleccioná al menos una empresa como actor' },
-        { status: 400 }
-      );
+
+  if (pdfFile) {
+    const pdfError = validateFalloPdfFile(pdfFile);
+    if (pdfError) {
+      return NextResponse.json({ error: pdfError }, { status: 400 });
     }
-  } else if (!payload.actor.trim()) {
-    return NextResponse.json({ error: 'El actor es obligatorio' }, { status: 400 });
+  }
+
+  const validationError = validateFalloFormPayload(payload);
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   try {
@@ -109,6 +78,25 @@ export async function PUT(
     const catalogs = await loadCatalogLookupsForFallo(payload);
     const fallo = buildFalloDocumentFromForm(payload, catalogs, existing);
     fallo.nroExpediente = nroExpediente;
+
+    if (pdfFile) {
+      const buffer = Buffer.from(await pdfFile.arrayBuffer());
+      const pdfHash = await assertPdfNotDuplicate(buffer, nroExpediente);
+      const existingPdf = existing.files?.find((file) => file.file.toLowerCase().endsWith('.pdf'));
+      const nextFileId =
+        existingPdf?.id ??
+        (existing.files?.reduce((max, file) => Math.max(max, file.id), 0) ?? 0) + 1;
+      const fileEntry = await uploadFalloPdfToStorage(
+        nroExpediente,
+        buffer,
+        pdfFile.name,
+        nextFileId
+      );
+      const otherFiles = (existing.files ?? []).filter((file) => file.id !== nextFileId);
+      fallo.files = [...otherFiles, fileEntry];
+      fallo.pdfHash = pdfHash;
+    }
+
     await saveFalloDocument(fallo);
 
     return NextResponse.json({
@@ -117,6 +105,9 @@ export async function PUT(
       url: `/observatorio/fallo/${nroExpediente}`,
     });
   } catch (error) {
+    if (error instanceof DuplicateFalloPdfError) {
+      return duplicateFalloPdfResponse(error);
+    }
     console.error(error);
     return NextResponse.json({ error: 'No se pudo actualizar el fallo' }, { status: 500 });
   }
