@@ -12,6 +12,7 @@ import { formatTodayFecha } from '@/lib/observatorio-normalize';
 import type { StoredFalloDocument } from '@/types/observatorio';
 import type { FalloAiExtractedForm } from '@/types/fallo-ai';
 import { FalloAiImport } from '@/components/admin/FalloAiImport';
+import { FalloPdfUpload, type FalloPdfDuplicateInfo } from '@/components/admin/FalloPdfUpload';
 
 type FalloEditorProps = {
   mode: 'create' | 'edit';
@@ -141,6 +142,7 @@ export function FalloEditor({
   const [newEtiqueta, setNewEtiqueta] = useState('');
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [pendingPdf, setPendingPdf] = useState<File | null>(null);
+  const [duplicatePdf, setDuplicatePdf] = useState<FalloPdfDuplicateInfo | null>(null);
 
   async function applyAiExtractedForm(extracted: FalloAiExtractedForm) {
     setError('');
@@ -378,6 +380,18 @@ export function FalloEditor({
     setError('');
     setSuccess('');
 
+    if (isPublic && mode === 'create' && !pendingPdf) {
+      setError('Tenés que adjuntar el PDF de la sentencia para publicar el fallo.');
+      setLoading(false);
+      return;
+    }
+
+    if (duplicatePdf) {
+      setError('Este PDF ya está cargado en el observatorio. Revisá el fallo existente.');
+      setLoading(false);
+      return;
+    }
+
     const payload = {
       actor: form.actor,
       demandado: form.demandado,
@@ -408,7 +422,7 @@ export function FalloEditor({
     try {
       let response: Response;
 
-      if (!isPublic && mode === 'create' && pendingPdf) {
+      if (pendingPdf) {
         const body = new FormData();
         body.append('payload', JSON.stringify(payload));
         body.append('pdf', pendingPdf);
@@ -428,6 +442,9 @@ export function FalloEditor({
 
       const data = await response.json();
       if (!response.ok) {
+        if (data.duplicate && data.fallo) {
+          setDuplicatePdf(data.fallo as FalloPdfDuplicateInfo);
+        }
         setError(data.error || 'Error al guardar');
         return;
       }
@@ -463,23 +480,36 @@ export function FalloEditor({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {!isPublic && mode === 'create' ? (
+      {!isPublic ? (
         <FalloAiImport
           disabled={loading}
-          onExtracted={({ form: extracted, warnings, pdf }) => {
+          excludeExpediente={mode === 'edit' ? initialId : undefined}
+          existingPdfLabel={
+            mode === 'edit'
+              ? (initialFallo?.files?.find((file) => file.file.toLowerCase().endsWith('.pdf'))?.file ??
+                null)
+              : null
+          }
+          onPdfSelected={setPendingPdf}
+          onPdfCleared={() => setPendingPdf(null)}
+          onDuplicateChange={setDuplicatePdf}
+          onExtracted={({ form: extracted, warnings }) => {
             setAiWarnings(warnings);
-            setPendingPdf(pdf);
             void applyAiExtractedForm(extracted);
           }}
         />
-      ) : null}
-
-      {pendingPdf ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
-          <span className="font-semibold">PDF asociado:</span> {pendingPdf.name} — se guardará con el
-          fallo al crear.
-        </div>
-      ) : null}
+      ) : (
+        <FalloPdfUpload
+          disabled={loading}
+          variant="public"
+          required
+          excludeExpediente={mode === 'edit' ? initialId : undefined}
+          onPdfSelected={setPendingPdf}
+          onPdfCleared={() => setPendingPdf(null)}
+          onDuplicateChange={setDuplicatePdf}
+          description="Adjuntá la sentencia en PDF (obligatorio). Completá los datos del fallo manualmente y publicá."
+        />
+      )}
 
       {aiWarnings.length ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
