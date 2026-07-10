@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { FalloEditor } from '@/components/admin/FalloEditor';
+import { ColaboradorAuthButton } from '@/components/observatorio/ColaboradorAuthButton';
 
 export const metadata: Metadata = {
   title: 'Cargar fallo — Observatorio UCU',
   description:
-    'Colaborá con el observatorio publicando un fallo jurisprudencial en defensa del consumidor. Sin registro previo.',
+    'Colaborá con el observatorio publicando un fallo jurisprudencial en defensa del consumidor. Registrate con Google para sumar puntos en el ranking.',
 };
 
 export default function ObservatorioNuevoFalloPage() {
@@ -27,8 +28,12 @@ export default function ObservatorioNuevoFalloPage() {
         </h1>
         <p className="mt-3 max-w-prose font-serif text-base leading-relaxed text-[var(--ink-muted)]">
           El observatorio es un proyecto comunitario. Podés sumar antecedentes jurisprudenciales sin
-          registrarte ni iniciar sesión. Completá los datos del fallo y adjuntá el PDF de la sentencia.
+          registrarte. Si iniciás sesión con Google, tu aporte suma puntos en el ranking de
+          colaboradores y podés comentar fallos.
         </p>
+        <div className="mt-4">
+          <ColaboradorAuthButton compact />
+        </div>
       </div>
 
       <div className="ucu-card p-6 md:p-8">

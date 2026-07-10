@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FalloPdfViewer } from '@/components/observatorio/FalloPdfViewer';
+import { FalloCommentSection } from '@/components/observatorio/FalloCommentSection';
 import { resolveFalloFileUrl } from '@/lib/fallos-files';
 import { formatDemandado, formatMonto, getFalloById } from '@/lib/observatorio';
 
@@ -129,7 +130,16 @@ export default async function FalloDetailPage({
             </div>
           </section>
         ) : null}
+
+        {fallo.submittedBy ? (
+          <p className="mt-6 text-sm text-slate-500">
+            Aportado por{' '}
+            <span className="font-medium text-slate-700">{fallo.submittedBy.name}</span>
+          </p>
+        ) : null}
       </article>
+
+      <FalloCommentSection falloId={fallo.nroExpediente} />
     </main>
   );
 }
