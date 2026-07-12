@@ -74,20 +74,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, unmatched: true });
     }
 
-    const received = await fetchReceivedEmailContent(meta.email_id);
-    const fromHeader = received.from ?? meta.from ?? 'consumidor';
+    const fromHeader = meta.from ?? 'consumidor';
     const sender = parseSenderName(fromHeader);
-    const body = (received.text?.trim() || stripHtml(received.html ?? '')).trim();
+    let subject = meta.subject ?? '(sin asunto)';
+    let body = '';
+
+    try {
+      const received = await fetchReceivedEmailContent(meta.email_id);
+      subject = received.subject ?? subject;
+      body = (received.text?.trim() || stripHtml(received.html ?? '')).trim();
+    } catch (fetchError) {
+      console.warn('[resend-inbound] no se pudo leer cuerpo via API, usando metadata', fetchError);
+    }
 
     if (!body) {
-      return NextResponse.json({ ok: true, empty: true });
+      body = [
+        'Respuesta del consumidor recibida.',
+        '',
+        `De: ${sender.name} <${sender.email}>`,
+        `Asunto: ${subject}`,
+        '',
+        'El contenido completo está en Resend → Receiving.',
+      ].join('\n');
     }
 
     await addReclamoComunicacion(reclamoId, {
       direction: 'inbound',
       from: sender.email,
       to: toAddresses[0] ?? '',
-      subject: received.subject ?? meta.subject ?? '(sin asunto)',
+      subject,
       body,
       sentAt: meta.created_at ?? new Date().toISOString(),
       sentByEmail: sender.email,
