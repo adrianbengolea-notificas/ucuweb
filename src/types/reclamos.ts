@@ -103,7 +103,11 @@ export type ReclamoComentario = {
 
 export type ReclamoComunicacion = {
   id: string;
+  /** outbound = enviado por UCU; inbound = respuesta del consumidor */
+  direction?: 'outbound' | 'inbound';
   to: string;
+  /** Remitente en respuestas entrantes */
+  from?: string;
   subject: string;
   body: string;
   sentAt: string;
@@ -111,6 +115,16 @@ export type ReclamoComunicacion = {
   sentByName: string;
   /** true si el borrador fue generado por Gemini */
   viaIA?: boolean;
+};
+
+export type ReclamoComunicacionSugerencia = {
+  reclamoId: number;
+  resumen: string;
+  empresas: string;
+  estadoDescripcion: string;
+  motivos: string[];
+  score: number;
+  comunicacion: Pick<ReclamoComunicacion, 'subject' | 'body' | 'sentAt' | 'viaIA'>;
 };
 
 export type ReclamoResponsable = {

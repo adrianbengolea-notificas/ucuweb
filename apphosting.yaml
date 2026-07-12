@@ -104,3 +104,25 @@ env:
     value: UCU Usuarios Protegidos <reclamos@ucu.org.ar>
     availability:
       - RUNTIME
+
+  # Dominio Resend Inbound (ej. xxxx.resend.app o entrada.ucu.org.ar con MX a Resend)
+  - variable: RESEND_INBOUND_DOMAIN
+    secret: RESEND_INBOUND_DOMAIN
+    availability:
+      - RUNTIME
+
+  - variable: RESEND_INBOUND_LOCAL_PART
+    value: reclamos
+    availability:
+      - RUNTIME
+
+  # Fallback si no hay inbound: casilla real que reciba respuestas
+  - variable: RESEND_REPLY_TO
+    value: abengolea1@gmail.com
+    availability:
+      - RUNTIME
+
+  - variable: RESEND_WEBHOOK_SECRET
+    secret: RESEND_WEBHOOK_SECRET
+    availability:
+      - RUNTIME

@@ -41,9 +41,10 @@ export async function POST(
   }
 
   try {
-    await sendEmail({ to, subject, body: text });
+    const { id: messageId } = await sendEmail({ to, subject, body: text, reclamoId });
 
     await addReclamoComunicacion(reclamoId, {
+      direction: 'outbound',
       to,
       subject,
       body: text,
@@ -53,7 +54,7 @@ export async function POST(
       viaIA,
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, messageId, to });
   } catch (error) {
     console.error('[comunicaciones]', error);
     return NextResponse.json(
