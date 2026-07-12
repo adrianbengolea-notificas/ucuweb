@@ -455,3 +455,146 @@ Redactá el borrador de contestación de oficio listo para revisar y editar.`;
 
   return callGemini(system, userPrompt);
 }
+
+export type ExpedienteTimelineRawPaso = {
+  fecha: string | null;
+  titulo: string | null;
+  descripcion: string | null;
+  importancia: 'alta' | 'media' | 'baja' | null;
+};
+
+export type ExpedienteTimelineRawExtraction = {
+  tituloSugerido: string | null;
+  resumenSugerido: string | null;
+  pasos: ExpedienteTimelineRawPaso[];
+  advertencias: string[];
+};
+
+export type DriveDocumentoAnalisis = {
+  /** Descripción del movimiento procesal detectado, lista para agregar al historial */
+  movimientoSugerido: string;
+  /** Explicación breve del razonamiento de la IA */
+  razonamiento: string;
+  /** Nivel de confianza en la sugerencia */
+  confianza: 'alta' | 'media' | 'baja';
+  /** Tipo de documento detectado */
+  tipoDocumento: string | null;
+};
+
+export async function analizarDocumentoDriveParaReclamo(
+  pdfBase64: string,
+  context: {
+    reclamoId: number;
+    resumen: string;
+    empresas: string;
+    estadoActual: string;
+    nombreArchivo: string;
+  }
+): Promise<DriveDocumentoAnalisis> {
+  const system = `Sos asistente jurídico de Usuarios y Consumidores Unidos (UCU), asociación de defensa del consumidor en Argentina.
+Tu tarea es analizar un documento (escrito judicial, carta documento, resolución, etc.) vinculado a un reclamo de consumidor y sugerir el movimiento o avance del caso que representa.
+
+Reglas:
+- Sé específico y concreto: describí QUÉ hito procesal representa el documento.
+- El movimientoSugerido debe ser una frase corta (máx. 150 caracteres) en pasado o presente perfecto, apta para registrarse en el historial del caso. Ej: "Demanda presentada ante el juzgado", "Contestación de demanda recibida — audiencia fijada", "Resolución favorable: empresa condenada a restituir importe".
+- razonamiento: 1-2 oraciones explicando por qué detectaste ese movimiento (sin repetir lo que ya está en movimientoSugerido).
+- confianza: "alta" si el documento es claro y tiene fecha/firma; "media" si hay ambigüedad; "baja" si el PDF es ilegible o muy genérico.
+- tipoDocumento: tipo breve ("escrito judicial", "carta documento", "resolución", "acuerdo", "notificación", "oficio", etc.) o null si no podés determinarlo.
+- Respondé SOLO JSON válido.`;
+
+  const userPrompt = `Reclamo #${context.reclamoId}:
+- Resumen: ${context.resumen}
+- Empresa(s): ${context.empresas}
+- Estado actual: ${context.estadoActual}
+- Nombre del archivo nuevo en Drive: ${context.nombreArchivo}
+
+Analizá el PDF adjunto y devolvé:
+{
+  "movimientoSugerido": "...",
+  "razonamiento": "...",
+  "confianza": "alta" | "media" | "baja",
+  "tipoDocumento": "..." | null
+}`;
+
+  const raw = await callGeminiParts(
+    system,
+    [
+      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+      { text: userPrompt },
+    ],
+    { json: true, temperature: 0.1 }
+  );
+
+  const parsed = JSON.parse(raw) as Partial<DriveDocumentoAnalisis>;
+  return {
+    movimientoSugerido: String(parsed.movimientoSugerido ?? '').trim() || 'Nuevo documento agregado al expediente',
+    razonamiento: String(parsed.razonamiento ?? '').trim(),
+    confianza:
+      parsed.confianza === 'alta' || parsed.confianza === 'media' || parsed.confianza === 'baja'
+        ? parsed.confianza
+        : 'media',
+    tipoDocumento: parsed.tipoDocumento ? String(parsed.tipoDocumento).trim() : null,
+  };
+}
+
+export async function extractExpedienteTimelineFromPdf(
+  pdfBase64: string,
+  context?: { tituloAccion?: string }
+): Promise<ExpedienteTimelineRawExtraction> {
+  const system = `Sos un asistente jurídico de Usuarios y Consumidores Unidos (UCU), asociación de defensa del consumidor en Argentina.
+Analizás expedientes judiciales o administrativos de acciones colectivas, amparos, medidas cautelares y reclamos colectivos.
+Tu tarea es extraer los PASOS MÁS IMPORTANTES del expediente, ordenados cronológicamente, para armar una línea de tiempo pública para consumidores.
+
+Reglas:
+- Extraé solo hechos que figuren en el documento; no inventes fechas ni resoluciones.
+- Incluí solo pasos de importancia "alta" o "media". Omití trámites rutinarios (presentaciones genéricas, vistas, cédulas, simples traslados sin decisión).
+- SÍ incluí: inicio de la acción, medidas cautelares, sentencias, fallos, acuerdos, audiencias con resultado, providencias que cambian la situación del consumidor, apelaciones relevantes, ejecución de sentencia.
+- fecha en formato DD/MM/AAAA cuando sea posible; si solo hay mes/año usá el día 01.
+- titulo: frase corta (máx. 80 caracteres) que resuma el hito.
+- descripcion: 2-4 oraciones en lenguaje claro para consumidores (sin jerga excesiva). Qué pasó y qué implica.
+- importancia: "alta" para sentencias/fallos/medidas cautelares que resuelven; "media" para hitos procesales relevantes; "baja" solo si es dudoso (preferí no incluir baja).
+- Máximo 40 pasos. Si el expediente es muy largo, priorizá los hitos sustantivos.
+- tituloSugerido y resumenSugerido: propuesta breve para la página de la acción colectiva, si se puede inferir del expediente.
+- advertencias: notas sobre datos faltantes, fechas inciertas o PDF ilegible.
+
+Respondé SOLO JSON válido:
+{
+  "tituloSugerido": string | null,
+  "resumenSugerido": string | null,
+  "pasos": [
+    { "fecha": "DD/MM/AAAA", "titulo": "...", "descripcion": "...", "importancia": "alta" | "media" }
+  ],
+  "advertencias": ["..."]
+}`;
+
+  const userPrompt = context?.tituloAccion
+    ? `Acción colectiva: ${context.tituloAccion}\n\nAnalizá el expediente adjunto y extraé la línea de tiempo.`
+    : 'Analizá el expediente adjunto y extraé la línea de tiempo de la acción colectiva.';
+
+  const raw = await callGeminiParts(
+    system,
+    [
+      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+      { text: userPrompt },
+    ],
+    { json: true, temperature: 0.15 }
+  );
+
+  const parsed = JSON.parse(raw) as Partial<ExpedienteTimelineRawExtraction>;
+  const pasos = Array.isArray(parsed.pasos) ? parsed.pasos : [];
+
+  return {
+    tituloSugerido: parsed.tituloSugerido ? String(parsed.tituloSugerido).trim() : null,
+    resumenSugerido: parsed.resumenSugerido ? String(parsed.resumenSugerido).trim() : null,
+    pasos: pasos.map((paso) => ({
+      fecha: paso.fecha ? String(paso.fecha).trim() : null,
+      titulo: paso.titulo ? String(paso.titulo).trim() : null,
+      descripcion: paso.descripcion ? String(paso.descripcion).trim() : null,
+      importancia:
+        paso.importancia === 'alta' || paso.importancia === 'media' || paso.importancia === 'baja'
+          ? paso.importancia
+          : null,
+    })),
+    advertencias: Array.isArray(parsed.advertencias) ? parsed.advertencias.map(String) : [],
+  };
+}

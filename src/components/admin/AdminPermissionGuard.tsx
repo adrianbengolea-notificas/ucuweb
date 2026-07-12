@@ -8,6 +8,8 @@ import type { AdminPermission } from '@/types/admin-users';
 
 const FALLBACK_ROUTES: { permission: AdminPermission; href: string }[] = [
   { permission: 'posts:read', href: '/admin' },
+  { permission: 'acciones:read', href: '/admin/acciones-colectivas' },
+  { permission: 'delegaciones:read', href: '/admin/delegaciones' },
   { permission: 'comments:read', href: '/admin/comentarios' },
   { permission: 'fallos:read', href: '/admin/fallos' },
   { permission: 'reclamos:read', href: '/admin/reclamos' },

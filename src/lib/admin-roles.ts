@@ -9,7 +9,7 @@ export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
 
 export const ADMIN_ROLE_DESCRIPTIONS: Record<AdminRole, string> = {
   administrador: 'Acceso total al panel, incluyendo gestión de usuarios.',
-  editor: 'Gestiona notas y comentarios del sitio.',
+  editor: 'Gestiona notas, comentarios, delegaciones y acciones colectivas del sitio.',
   moderador: 'Gestiona fallos del observatorio.',
   operador: 'Gestiona reclamos. Por defecto solo edita casos asignados.',
 };
@@ -20,6 +20,10 @@ const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
     'posts:write',
     'comments:read',
     'comments:write',
+    'acciones:read',
+    'acciones:write',
+    'delegaciones:read',
+    'delegaciones:write',
     'fallos:read',
     'fallos:write',
     'reclamos:read',
@@ -27,7 +31,16 @@ const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
     'users:read',
     'users:write',
   ],
-  editor: ['posts:read', 'posts:write', 'comments:read', 'comments:write'],
+  editor: [
+    'posts:read',
+    'posts:write',
+    'comments:read',
+    'comments:write',
+    'acciones:read',
+    'acciones:write',
+    'delegaciones:read',
+    'delegaciones:write',
+  ],
   moderador: ['fallos:read', 'fallos:write'],
   operador: ['reclamos:read', 'reclamos:write'],
 };

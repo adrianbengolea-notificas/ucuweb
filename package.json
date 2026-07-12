@@ -36,6 +36,10 @@
     "sync:reclamos:catalogs": "node scripts/sync-reclamos-from-sql.mjs --catalogs-only",
     "sync:reclamos:enrich": "node scripts/sync-reclamos-from-sql.mjs --enrich-only",
     "sync:reclamos:sample": "node scripts/sync-reclamos-from-sql.mjs --enrich-only --limit=10",
+    "audit:reclamos:causas": "node scripts/audit-reclamos-causas.mjs",
+    "fix:reclamos:causas": "node scripts/fix-reclamos-causas-rubro.mjs",
+    "fix:reclamos:causas:apply": "node scripts/fix-reclamos-causas-rubro.mjs --apply",
+    "verify:reclamos:causas": "node scripts/verify-reclamos-causas-fix.mjs",
     "build:reclamos-index": "node scripts/build-reclamos-search-index.mjs",
     "build:reclamos-index:dry": "node scripts/build-reclamos-search-index.mjs --dry-run",
     "build:fallos-index": "node scripts/build-fallos-search-index.mjs",
@@ -43,7 +47,9 @@
     "fix:observatorio-encoding": "node scripts/fix-observatorio-encoding.mjs",
     "fix:observatorio-encoding:dry": "node scripts/fix-observatorio-encoding.mjs --dry-run",
     "import:delegados": "node scripts/import-delegados-from-sql.mjs",
-    "import:delegados:dry": "node scripts/import-delegados-from-sql.mjs --dry-run"
+    "import:delegados:dry": "node scripts/import-delegados-from-sql.mjs --dry-run",
+    "migrate:delegaciones": "node scripts/migrate-delegaciones-wordpress.mjs",
+    "migrate:delegaciones:dry": "node scripts/migrate-delegaciones-wordpress.mjs --dry-run"
   },
   "dependencies": {
     "autoprefixer": "^10.4.20",

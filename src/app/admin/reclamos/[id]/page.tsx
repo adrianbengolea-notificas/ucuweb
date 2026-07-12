@@ -13,7 +13,9 @@ import type {
   ReclamoDelegado,
   ReclamoEstado,
   ReclamoGrupoEstado,
+  ReclamoCausaRef,
   StoredReclamoDocument,
+  SugerenciaDrive,
 } from '@/types/reclamos';
 import {
   ReclamoDenuncianteSection,
@@ -38,9 +40,85 @@ export default function AdminReclamoDetailPage() {
   const [delegados, setDelegados] = useState<ReclamoDelegado[]>([]);
   const [estados, setEstados] = useState<ReclamoEstado[]>([]);
   const [grupos, setGrupos] = useState<ReclamoGrupoEstado[]>([]);
+  const [causasValidacion, setCausasValidacion] = useState<{
+    validas: ReclamoCausaRef[];
+    incompatibles: ReclamoCausaRef[];
+    huerfanas: ReclamoCausaRef[];
+    sinRubroEmpresa: boolean;
+    rubroIds: number[];
+  } | null>(null);
   const [estadoId, setEstadoId] = useState('');
   const [notaEstado, setNotaEstado] = useState('');
   const [comentario, setComentario] = useState('');
+
+  // Sugerencias Drive IA
+  const [sugerencias, setSugerencias] = useState<SugerenciaDrive[]>([]);
+  const [textosEditados, setTextosEditados] = useState<Record<string, string>>({});
+  const [procesandoSugerencia, setProcesandoSugerencia] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const loadSugerencias = useCallback(async () => {
+    if (!reclamoId) return;
+    try {
+      const res = await fetch(`/api/admin/reclamos/${reclamoId}/sugerencias`, { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok) {
+        setSugerencias(data.sugerencias ?? []);
+        setTextosEditados(
+          Object.fromEntries((data.sugerencias ?? []).map((s: SugerenciaDrive) => [s.id, s.movimientoSugerido]))
+        );
+      }
+    } catch {
+      // silencioso — las sugerencias son opcionales
+    }
+  }, [reclamoId]);
+
+  useEffect(() => { void loadSugerencias(); }, [loadSugerencias]);
+
+  async function handleSugerencia(sugerenciaId: string, accion: 'confirmar' | 'descartar') {
+    setProcesandoSugerencia(sugerenciaId);
+    try {
+      const res = await fetch(`/api/admin/reclamos/${reclamoId}/sugerencias`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sugerenciaId,
+          accion,
+          textoEditado: accion === 'confirmar' ? textosEditados[sugerenciaId] : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error || 'No se pudo procesar la sugerencia');
+        return;
+      }
+      await Promise.all([loadSugerencias(), load()]);
+    } catch {
+      setError('Error al procesar la sugerencia');
+    } finally {
+      setProcesandoSugerencia(null);
+    }
+  }
+
+  async function handleSyncDrive() {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/admin/drive/sync', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reclamoId: Number(reclamoId) }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setError(d.error || 'Error en sync'); return; }
+      await loadSugerencias();
+    } catch {
+      setError('Error al sincronizar con Drive');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   // Comunicaciones
   const PLANTILLAS = [
@@ -75,6 +153,7 @@ export default function AdminReclamoDetailPage() {
       setDelegados(data.delegados || []);
       setEstados(data.estados || []);
       setGrupos(data.grupos || []);
+      setCausasValidacion(data.causasValidacion ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado');
     } finally {
@@ -305,6 +384,72 @@ export default function AdminReclamoDetailPage() {
         </div>
       ) : null}
 
+      {/* Sugerencias Drive IA */}
+      {sugerencias.length > 0 && (
+        <div className="mb-6 space-y-3">
+          {sugerencias.map((s) => (
+            <div key={s.id} className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    Sugerencia IA · Drive · {s.archivoNombre}
+                  </p>
+                  <textarea
+                    className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    rows={2}
+                    value={textosEditados[s.id] ?? s.movimientoSugerido}
+                    onChange={(e) =>
+                      setTextosEditados((prev) => ({ ...prev, [s.id]: e.target.value }))
+                    }
+                  />
+                  <p className="mt-1 text-xs text-slate-500">{s.razonamiento}</p>
+                </div>
+                <a
+                  href={s.archivoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-xs text-emerald-700 underline hover:text-emerald-900"
+                >
+                  Ver archivo
+                </a>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={procesandoSugerencia === s.id || !canWrite}
+                  onClick={() => void handleSugerencia(s.id, 'confirmar')}
+                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {procesandoSugerencia === s.id ? 'Guardando…' : 'Confirmar y agregar al historial'}
+                </button>
+                <button
+                  type="button"
+                  disabled={procesandoSugerencia === s.id}
+                  onClick={() => void handleSugerencia(s.id, 'descartar')}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Descartar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canWrite && reclamo?.driveFolderId && sugerencias.length === 0 && (
+        <div className="mb-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <span className="text-sm text-slate-500">Sin sugerencias nuevas de Drive.</span>
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={() => void handleSyncDrive()}
+            className="ml-auto rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
+          </button>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <section className="space-y-6">
           <ReclamoDenuncianteSection reclamo={reclamo} {...editorProps} />
@@ -313,11 +458,45 @@ export default function AdminReclamoDetailPage() {
 
           {reclamo.causas?.length ? (
             <Panel title="Causas / motivos">
+              {causasValidacion?.incompatibles.length ? (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="font-semibold">Causas incompatibles con el rubro de la empresa</p>
+                  <p className="mt-1 text-amber-800">
+                    El sistema legacy asignó motivos que no corresponden al rubro del denunciado
+                    (p. ej. causas de transporte en un plan de ahorro). No se usan en estadísticas.
+                  </p>
+                  <ul className="mt-2 list-inside list-disc">
+                    {causasValidacion.incompatibles.map((causa) => (
+                      <li key={causa.id}>{causa.descripcion}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {causasValidacion?.huerfanas.length ? (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  <p className="font-semibold">Causas huérfanas (ID sin catálogo activo)</p>
+                  <ul className="mt-2 list-inside list-disc">
+                    {causasValidacion.huerfanas.map((causa) => (
+                      <li key={causa.id}>
+                        #{causa.id} {causa.descripcion}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <ul className="list-inside list-disc text-sm text-slate-700">
-                {reclamo.causas.map((causa) => (
-                  <li key={causa.id}>{causa.descripcion}</li>
-                ))}
+                {(causasValidacion?.validas.length ? causasValidacion.validas : reclamo.causas).map(
+                  (causa) => (
+                    <li key={causa.id}>{causa.descripcion}</li>
+                  )
+                )}
               </ul>
+              {!causasValidacion?.validas.length && causasValidacion?.incompatibles.length ? (
+                <p className="mt-3 text-sm text-slate-500">
+                  No hay causas válidas según rubro. Revisar en el sistema legacy o reclasificar
+                  manualmente.
+                </p>
+              ) : null}
             </Panel>
           ) : null}
 

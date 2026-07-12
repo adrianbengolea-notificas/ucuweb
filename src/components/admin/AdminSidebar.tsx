@@ -3,28 +3,27 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  BarChart3,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   FileText,
   Gavel,
   LayoutDashboard,
-  LogOut,
   MessageSquare,
   Plus,
   Search,
-  Shield,
   Users,
   ClipboardList,
+  Megaphone,
   Tags,
   UserCheck,
   X,
   Menu,
 } from 'lucide-react';
 import { useState } from 'react';
-import { logoutAdmin, useAdminUser } from '@/components/admin/AdminAuth';
+import { useAdminUser } from '@/components/admin/AdminAuth';
+import { AdminMobileFooter } from '@/components/admin/AdminMobileFooter';
 import { useSidebar } from '@/components/admin/AdminSidebarContext';
-import { ADMIN_ROLE_LABELS } from '@/lib/admin-roles';
 import { cn } from '@/lib/utils';
 import type { AdminPermission } from '@/types/admin-users';
 
@@ -49,6 +48,18 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/admin', label: 'Notas', icon: LayoutDashboard, permission: 'posts:read', exact: true },
       { href: '/admin/posts/nueva', label: 'Nueva nota', icon: Plus, permission: 'posts:write', accent: 'green' },
       { href: '/admin/comentarios', label: 'Comentarios', icon: MessageSquare, permission: 'comments:read' },
+      {
+        href: '/admin/acciones-colectivas',
+        label: 'Acciones colectivas',
+        icon: Megaphone,
+        permission: 'acciones:read',
+      },
+      {
+        href: '/admin/delegaciones',
+        label: 'Delegaciones',
+        icon: UserCheck,
+        permission: 'delegaciones:read',
+      },
     ],
   },
   {
@@ -96,12 +107,20 @@ const NAV_SECTIONS: NavSection[] = [
         permission: 'reclamos:read',
         exact: true,
       },
+      {
+        href: '/admin/reclamos/estadisticas',
+        label: 'Estadísticas',
+        icon: BarChart3,
+        permission: 'reclamos:read',
+        exact: true,
+      },
     ],
   },
   {
     title: 'Sistema',
     items: [
       { href: '/admin/usuarios', label: 'Usuarios', icon: Users, permission: 'users:read' },
+      { href: '/admin/perfil', label: 'Mi perfil', icon: UserCheck, exact: true },
     ],
   },
 ];
@@ -219,63 +238,22 @@ function SidebarContent({
         ))}
       </nav>
 
-      <div className="border-t border-slate-200 p-3">
-        {!collapsed && (
-          <div className="mb-3 rounded-xl bg-slate-50 px-3 py-3">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a5fb4]/10 text-xs font-bold text-[#1a5fb4]">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-800">{user.name}</p>
-                <p className="truncate text-xs text-slate-500">{user.email}</p>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-1.5">
-              <Shield className="h-3 w-3 text-[#2d8f47]" />
-              <span className="text-xs font-medium text-[#2d8f47]">{ADMIN_ROLE_LABELS[user.role]}</span>
-            </div>
-          </div>
-        )}
+      <div className="border-t border-slate-200 p-3 lg:hidden">
+        <AdminMobileFooter collapsed={collapsed} />
+      </div>
 
-        <div className={cn('space-y-1', collapsed && 'flex flex-col items-center')}>
-          <Link
-            href="/"
-            target="_blank"
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-[#1a5fb4]',
-              collapsed && 'justify-center px-2'
-            )}
-            title={collapsed ? 'Ver sitio' : undefined}
-          >
-            <ExternalLink className="h-[18px] w-[18px] shrink-0" />
-            {!collapsed && 'Ver sitio'}
-          </Link>
-          <button
-            type="button"
-            onClick={() => logoutAdmin()}
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600',
-              collapsed && 'justify-center px-2'
-            )}
-            title={collapsed ? 'Salir' : undefined}
-          >
-            <LogOut className="h-[18px] w-[18px] shrink-0" />
-            {!collapsed && 'Salir'}
-          </button>
-        </div>
-
-        {onToggleCollapse && collapsed && (
+      {onToggleCollapse && collapsed && (
+        <div className="hidden border-t border-slate-200 p-3 lg:block">
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="mt-2 hidden w-full items-center justify-center rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 lg:flex"
+            className="flex w-full items-center justify-center rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
             aria-label="Expandir menú"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 }

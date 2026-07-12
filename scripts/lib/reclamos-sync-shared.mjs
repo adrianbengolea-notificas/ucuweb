@@ -257,6 +257,91 @@ export async function loadCausasByGuid(pool) {
   return map;
 }
 
+export async function loadCausasRubros(pool) {
+  const result = await pool.request().query(`
+    SELECT cr.id_causa, cr.id_rubro
+    FROM ${qualified('causas_rubros')} cr
+    INNER JOIN ${qualified('causas')} c ON c.id_causa = cr.id_causa AND c.activo = 1
+    INNER JOIN ${qualified('rubros')} r ON r.id_rubro = cr.id_rubro AND r.activo = 1
+  `);
+
+  return result.recordset.map((row) => ({
+    causaId: row.id_causa,
+    rubroId: row.id_rubro,
+  }));
+}
+
+export async function loadEmpresasRubros(pool) {
+  const result = await pool.request().query(`
+    SELECT er.id_empresa, er.id_rubro, r.descripcion AS rubro_nombre
+    FROM ${qualified('empresas_rubros')} er
+    INNER JOIN ${qualified('rubros')} r ON r.id_rubro = er.id_rubro AND r.activo = 1
+  `);
+
+  return result.recordset.map((row) => ({
+    empresaId: row.id_empresa,
+    rubroId: row.id_rubro,
+    rubroNombre: trim(row.rubro_nombre),
+  }));
+}
+
+export function sanitizeCausasForReclamo(reclamo, maps) {
+  const causas = reclamo.causas ?? [];
+  if (!causas.length) return { causas: [], removidas: [] };
+
+  const empresaIds = reclamo.empresaIds?.length
+    ? reclamo.empresaIds
+    : (reclamo.empresas ?? []).map((e) => e.id);
+
+  const rubroSet = new Set();
+  for (const empresaId of empresaIds) {
+    for (const rubroId of maps.rubroIdsByEmpresa.get(empresaId) ?? []) {
+      rubroSet.add(rubroId);
+    }
+  }
+  const rubroIds = [...rubroSet];
+  const sinRubroEmpresa = empresaIds.length > 0 && rubroSet.size === 0;
+
+  const validas = [];
+  const removidas = [];
+
+  for (const causa of causas) {
+    if (!maps.activeCausaIds.has(causa.id)) {
+      removidas.push(causa);
+      continue;
+    }
+    const compatible =
+      sinRubroEmpresa ||
+      rubroIds.some((rubroId) => maps.causaIdsByRubro.get(rubroId)?.has(causa.id));
+    if (compatible) validas.push(causa);
+    else removidas.push(causa);
+  }
+
+  return { causas: validas, removidas };
+}
+
+export function buildCausaValidationMaps(causaRubroPairs, empresaRubroEntries, causasCatalog) {
+  const causaIdsByRubro = new Map();
+  for (const { causaId, rubroId } of causaRubroPairs) {
+    const set = causaIdsByRubro.get(rubroId) ?? new Set();
+    set.add(causaId);
+    causaIdsByRubro.set(rubroId, set);
+  }
+
+  const rubroIdsByEmpresa = new Map();
+  for (const { empresaId, rubroId } of empresaRubroEntries) {
+    const list = rubroIdsByEmpresa.get(empresaId) ?? [];
+    if (!list.includes(rubroId)) list.push(rubroId);
+    rubroIdsByEmpresa.set(empresaId, list);
+  }
+
+  const activeCausaIds = new Set(
+    causasCatalog.filter((c) => c.activo !== false).map((c) => c.id)
+  );
+
+  return { causaIdsByRubro, rubroIdsByEmpresa, activeCausaIds };
+}
+
 export function normalizeDriveUrl(value) {
   const url = trim(value);
   return /^https?:\/\//i.test(url) ? url : undefined;
