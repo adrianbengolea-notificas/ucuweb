@@ -23,6 +23,12 @@ import {
 import { useState } from 'react';
 import { useAdminUser } from '@/components/admin/AdminAuth';
 import { AdminMobileFooter } from '@/components/admin/AdminMobileFooter';
+import {
+  AdminReclamoAlertBell,
+  ReclamoIconDot,
+  ReclamoNavBadge,
+  useReclamoAlerts,
+} from '@/components/admin/AdminReclamoAlerts';
 import { useSidebar } from '@/components/admin/AdminSidebarContext';
 import { cn } from '@/lib/utils';
 import type { AdminPermission } from '@/types/admin-users';
@@ -34,6 +40,7 @@ type NavItem = {
   permission?: AdminPermission;
   exact?: boolean;
   accent?: 'green' | 'blue';
+  alertBadge?: 'reclamos-pendientes';
 };
 
 type NavSection = {
@@ -85,6 +92,7 @@ const NAV_SECTIONS: NavSection[] = [
         icon: ClipboardList,
         permission: 'reclamos:read',
         exact: true,
+        alertBadge: 'reclamos-pendientes',
       },
       {
         href: '/admin/reclamos/asignados',
@@ -129,13 +137,16 @@ function NavLink({
   item,
   collapsed,
   onNavigate,
+  pendingReclamos,
 }: {
   item: NavItem;
   collapsed: boolean;
   onNavigate?: () => void;
+  pendingReclamos: number;
 }) {
   const pathname = usePathname();
   const Icon = item.icon;
+  const showBadge = item.alertBadge === 'reclamos-pendientes' && pendingReclamos > 0;
 
   const isActive = item.exact
     ? pathname === item.href
@@ -158,16 +169,22 @@ function NavLink({
         isActive
           ? 'bg-[#1a5fb4] text-white shadow-sm'
           : accentClass || 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-        collapsed && 'justify-center px-2'
+        collapsed && 'justify-center px-2',
+        showBadge && !isActive && 'ring-1 ring-red-200'
       )}
     >
-      <Icon
-        className={cn(
-          'h-[18px] w-[18px] shrink-0',
-          isActive ? 'text-white' : item.accent === 'green' ? 'text-[#2d8f47]' : 'text-slate-400 group-hover:text-current'
-        )}
-      />
+      <span className="relative shrink-0">
+        <Icon
+          className={cn(
+            'h-[18px] w-[18px]',
+            isActive ? 'text-white' : item.accent === 'green' ? 'text-[#2d8f47]' : 'text-slate-400 group-hover:text-current',
+            showBadge && !isActive && 'text-red-600'
+          )}
+        />
+        {collapsed && showBadge ? <ReclamoIconDot show /> : null}
+      </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && showBadge ? <ReclamoNavBadge count={pendingReclamos} /> : null}
     </Link>
   );
 }
@@ -182,6 +199,8 @@ function SidebarContent({
   onToggleCollapse?: () => void;
 }) {
   const user = useAdminUser();
+  const { counts } = useReclamoAlerts();
+  const pendingReclamos = counts.recibidos;
 
   const visibleSections = NAV_SECTIONS.map((section) => ({
     ...section,
@@ -225,13 +244,24 @@ function SidebarContent({
         {visibleSections.map((section) => (
           <div key={section.title}>
             {!collapsed && (
-              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {section.title}
+              <p className="mb-2 flex items-center gap-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <span>{section.title}</span>
+                {section.title === 'Reclamos' && pendingReclamos > 0 ? (
+                  <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold normal-case tracking-normal text-white">
+                    {pendingReclamos}
+                  </span>
+                ) : null}
               </p>
             )}
             <div className="space-y-0.5">
               {section.items.map((item) => (
-                <NavLink key={item.href} item={item} collapsed={collapsed} onNavigate={onNavigate} />
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  collapsed={collapsed}
+                  onNavigate={onNavigate}
+                  pendingReclamos={pendingReclamos}
+                />
               ))}
             </div>
           </div>
@@ -269,14 +299,17 @@ export function AdminSidebar() {
         <Link href="/admin" className="text-lg font-bold text-[#1a5fb4]">
           UCU Admin
         </Link>
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
-          aria-label="Abrir menú"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <AdminReclamoAlertBell />
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Mobile overlay */}

@@ -5,7 +5,7 @@ import { Resend } from 'resend';
 function getResend(): Resend {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key || key.startsWith('re_REEMPLAZAR')) {
-    throw new Error('RESEND_API_KEY no configurada en .env.local');
+    throw new Error('RESEND_API_KEY no configurada en el entorno del servidor');
   }
   return new Resend(key);
 }
@@ -13,7 +13,7 @@ function getResend(): Resend {
 function getFromEmail(): string {
   return (
     process.env.RESEND_FROM_EMAIL?.trim() ||
-    'UCU Usuarios Protegidos <reclamos@consumidoresprotegidos.com.ar>'
+    'UCU Usuarios Protegidos <reclamos@ucu.org.ar>'
   );
 }
 
