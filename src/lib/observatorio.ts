@@ -170,6 +170,27 @@ export async function getDivisas(): Promise<DivisaOption[]> {
   }));
 }
 
+/** Título para compartir en redes sin exponer nombres de personas. */
+export function buildFalloShareTitle(fallo: FalloDocument): string {
+  const suffix = ' — Observatorio UCU';
+
+  if (fallo.rubro.length) {
+    const rubros = fallo.rubro.map((item) => item.nombre).join(' / ');
+    return `Fallo sobre ${rubros}${suffix}`;
+  }
+
+  if (fallo.tipoJuicio?.nombre) {
+    return `Fallo de ${fallo.tipoJuicio.nombre}${suffix}`;
+  }
+
+  if (fallo.causas.length) {
+    const causas = fallo.causas.map((item) => item.nombre).join(' / ');
+    return `Fallo sobre ${causas}${suffix}`;
+  }
+
+  return `Fallo jurisprudencial${suffix}`;
+}
+
 export function formatDemandado(fallo: FalloDocument): string {
   if (fallo.demandado) return fallo.demandado;
   if (fallo.demandadoEmpresas.length) {

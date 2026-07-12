@@ -2,7 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { resolveFalloFileUrl } from '@/lib/fallos-files';
-import { formatDemandado, formatMonto, getFalloById } from '@/lib/observatorio';
+import {
+  buildFalloShareTitle,
+  formatDemandado,
+  formatMonto,
+  getFalloById,
+} from '@/lib/observatorio';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +23,23 @@ export async function generateMetadata({
     return { title: 'Fallo no encontrado — Observatorio UCU' };
   }
 
+  const shareTitle = buildFalloShareTitle(fallo);
+  const shareDescription =
+    fallo.resumen?.slice(0, 160) || 'Detalle del fallo jurisprudencial en defensa del consumidor.';
+
   return {
-    title: `${fallo.actor || 'Fallo'} — Observatorio UCU`,
-    description: fallo.resumen?.slice(0, 160) || 'Detalle del fallo jurisprudencial.',
+    title: shareTitle,
+    description: shareDescription,
+    openGraph: {
+      title: shareTitle,
+      description: shareDescription,
+      type: 'article',
+    },
+    twitter: {
+      card: 'summary',
+      title: shareTitle,
+      description: shareDescription,
+    },
   };
 }
 
