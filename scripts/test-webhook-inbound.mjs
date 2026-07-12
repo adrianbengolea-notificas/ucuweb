@@ -4,7 +4,10 @@ import { Webhook } from 'standardwebhooks';
 
 const url = process.argv.find((a) => a.startsWith('--url='))?.slice(6) || 'https://ucu.org.ar/api/webhooks/resend/inbound';
 const reclamoId = Number(process.argv.find((a) => a.startsWith('--reclamo='))?.slice(10) || 6384);
-const secret = process.env.RESEND_WEBHOOK_SECRET?.trim();
+const secretRaw = process.env.RESEND_WEBHOOK_SECRET?.trim();
+const secret = secretRaw?.startsWith('whsec_whsec_')
+  ? `whsec_${secretRaw.slice('whsec_whsec_'.length)}`
+  : secretRaw;
 const inboundDomain = process.env.RESEND_INBOUND_DOMAIN?.trim() || 'xaezenu.resend.app';
 
 if (!secret) throw new Error('Falta RESEND_WEBHOOK_SECRET en el entorno');

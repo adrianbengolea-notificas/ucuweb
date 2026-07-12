@@ -122,7 +122,7 @@ Equipo UCU`;
     'Hola, recibí su mensaje. Esta es una respuesta de prueba del consumidor para validar el webhook inbound.';
 
   const inbound = await resend.emails.send({
-    from: `Consumidor Prueba <${to}>`,
+    from,
     to: replyTo,
     subject: inboundSubject,
     text: inboundBody,

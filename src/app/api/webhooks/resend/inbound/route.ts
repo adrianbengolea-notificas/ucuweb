@@ -28,6 +28,14 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+function normalizeWebhookSecret(secret: string): string {
+  const trimmed = secret.trim();
+  if (trimmed.startsWith('whsec_whsec_')) {
+    return `whsec_${trimmed.slice('whsec_whsec_'.length)}`;
+  }
+  return trimmed;
+}
+
 export async function POST(request: NextRequest) {
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET?.trim();
   if (!webhookSecret) {
@@ -47,7 +55,7 @@ export async function POST(request: NextRequest) {
     const resend = new Resend(process.env.RESEND_API_KEY);
     event = resend.webhooks.verify({
       payload: rawBody,
-      webhookSecret,
+      webhookSecret: normalizeWebhookSecret(webhookSecret),
       headers,
     }) as InboundWebhookEvent;
   } catch (error) {
