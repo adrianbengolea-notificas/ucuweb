@@ -7,6 +7,7 @@ import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Loader2, Sparkles, Send, Clock } from 'lucide-react';
 import { useAdminUser } from '@/components/admin/AdminAuth';
+import { isPlausibleEmail } from '@/lib/utils';
 import type {
   ReclamoAdminBandeja,
   ReclamoComunicacion,
@@ -136,7 +137,7 @@ export default function AdminReclamoDetailPage() {
   const [generatingDraft, setGeneratingDraft] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailSuccess, setEmailSuccess] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState<{ to: string; messageId?: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -269,7 +270,7 @@ export default function AdminReclamoDetailPage() {
     if (!reclamo || !emailSubject.trim() || !emailBody.trim()) return;
     setSendingEmail(true);
     setEmailError(null);
-    setEmailSuccess(false);
+    setEmailSuccess(null);
     try {
       const res = await fetch(`/api/admin/reclamos/${reclamoId}/comunicaciones`, {
         method: 'POST',
@@ -279,7 +280,7 @@ export default function AdminReclamoDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al enviar');
-      setEmailSuccess(true);
+      setEmailSuccess({ to: data.to ?? reclamo.denunciante.email, messageId: data.messageId });
       setEmailSubject('');
       setEmailBody('');
       setEmailViaIA(false);
@@ -572,7 +573,7 @@ export default function AdminReclamoDetailPage() {
               sending={sendingEmail}
               error={emailError}
               success={emailSuccess}
-              onClearSuccess={() => setEmailSuccess(false)}
+              onClearSuccess={() => setEmailSuccess(null)}
               onGenerateDraft={handleGenerateDraft}
               onSend={handleSendEmail}
             />
@@ -717,7 +718,7 @@ type ComunicacionesPanelProps = {
   generating: boolean;
   sending: boolean;
   error: string | null;
-  success: boolean;
+  success: { to: string; messageId?: string } | null;
   onClearSuccess: () => void;
   onGenerateDraft: () => void;
   onSend: (e: React.FormEvent) => void;
@@ -744,6 +745,7 @@ function ComunicacionesPanel({
 }: ComunicacionesPanelProps) {
   const comunicaciones = reclamo.comunicaciones ?? [];
   const emailDestino = reclamo.denunciante.email;
+  const emailDestinoInvalido = Boolean(emailDestino) && !isPlausibleEmail(emailDestino);
 
   return (
     <div className="overflow-hidden rounded-2xl border-2 border-[#1a5fb4]/20 bg-[#f0f6ff] shadow-sm">
@@ -758,6 +760,11 @@ function ComunicacionesPanel({
         <p className="mt-0.5 text-xs text-[#1a5fb4]">
           Se envía a: <strong>{emailDestino}</strong>
         </p>
+        {emailDestinoInvalido ? (
+          <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+            El email del denunciante parece inválido. Corregilo en los datos del reclamo antes de enviar.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-4 p-5">
@@ -823,7 +830,12 @@ function ComunicacionesPanel({
           )}
           {success && (
             <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-semibold text-green-700">
-              ✓ Email enviado correctamente a {emailDestino}
+              ✓ Email enviado a <strong>{success.to}</strong>
+              {success.messageId ? (
+                <span className="mt-1 block font-normal text-green-600">
+                  ID Resend: <code className="rounded bg-green-100 px-1">{success.messageId}</code> (buscalo en resend.com/emails)
+                </span>
+              ) : null}
             </p>
           )}
 
@@ -844,7 +856,7 @@ function ComunicacionesPanel({
 
             <button
               type="submit"
-              disabled={sending || !subject.trim() || !body.trim()}
+              disabled={sending || !subject.trim() || !body.trim() || emailDestinoInvalido}
               className="flex items-center gap-2 rounded-lg bg-[#1a5fb4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#004a80] disabled:opacity-60"
             >
               {sending ? (

@@ -49,7 +49,8 @@
     "import:delegados": "node scripts/import-delegados-from-sql.mjs",
     "import:delegados:dry": "node scripts/import-delegados-from-sql.mjs --dry-run",
     "migrate:delegaciones": "node scripts/migrate-delegaciones-wordpress.mjs",
-    "migrate:delegaciones:dry": "node scripts/migrate-delegaciones-wordpress.mjs --dry-run"
+    "migrate:delegaciones:dry": "node scripts/migrate-delegaciones-wordpress.mjs --dry-run",
+    "probe:resend": "node scripts/probe-resend-email.mjs"
   },
   "dependencies": {
     "autoprefixer": "^10.4.20",

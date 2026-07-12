@@ -23,10 +23,10 @@ export type SendEmailOptions = {
   body: string;
 };
 
-export async function sendEmail(opts: SendEmailOptions): Promise<void> {
+export async function sendEmail(opts: SendEmailOptions): Promise<{ id: string }> {
   const resend = getResend();
   const html = bodyToHtml(opts.body);
-  const { error } = await resend.emails.send({
+  const { data, error } = await resend.emails.send({
     from: getFromEmail(),
     to: opts.to,
     subject: opts.subject,
@@ -34,6 +34,8 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
     text: opts.body,
   });
   if (error) throw new Error(error.message);
+  if (!data?.id) throw new Error('Resend no devolvió ID de mensaje');
+  return { id: data.id };
 }
 
 // Convierte texto plano con saltos de línea a HTML simple con el estilo UCU
