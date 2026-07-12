@@ -74,7 +74,7 @@ export function FalloAiImport({ onExtracted, disabled }: FalloAiImportProps) {
           </p>
           {geminiConfigured === false ? (
             <p className="mt-2 text-sm font-medium text-red-700">
-              Falta configurar GEMINI_API_KEY en .env.local
+              Falta configurar GEMINI_API_KEY en el servidor
             </p>
           ) : null}
         </div>

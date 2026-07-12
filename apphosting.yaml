@@ -89,3 +89,18 @@ env:
     secret: ADMIN_PANEL_PASSWORD
     availability:
       - RUNTIME
+
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+    availability:
+      - RUNTIME
+
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+    availability:
+      - RUNTIME
+
+  - variable: RESEND_FROM_EMAIL
+    value: UCU Usuarios Protegidos <reclamos@consumidoresprotegidos.com.ar>
+    availability:
+      - RUNTIME

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateEmailDraftForReclamo } from '@/lib/gemini';
+import { generateEmailDraftForReclamo, getGeminiApiKey } from '@/lib/gemini';
 import {
   reclamoWriteForbiddenResponse,
   requireReclamoWriteAccess,
@@ -27,6 +27,16 @@ export async function POST(
 
   const body = await request.json();
   const plantilla = typeof body?.plantilla === 'string' ? body.plantilla : 'Actualización del caso';
+
+  if (!getGeminiApiKey()) {
+    return NextResponse.json(
+      {
+        error:
+          'GEMINI_API_KEY no configurada en el servidor. En producción, cargala como secreto en Firebase App Hosting.',
+      },
+      { status: 503 }
+    );
+  }
 
   const d = reclamo.denunciante;
   const nombreConsumidor = `${d.nombre} ${d.apellido}`;

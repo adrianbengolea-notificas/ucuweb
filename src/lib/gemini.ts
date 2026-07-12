@@ -14,6 +14,14 @@ export function getGeminiApiKey(): string | null {
   return process.env.GEMINI_API_KEY?.trim() || null;
 }
 
+export function requireGeminiApiKey(): string {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY no configurada en el entorno del servidor');
+  }
+  return apiKey;
+}
+
 type GeminiPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } };
@@ -23,10 +31,7 @@ async function callGeminiParts(
   parts: GeminiPart[],
   options?: { json?: boolean }
 ): Promise<string> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY no configurada en .env.local');
-  }
+  const apiKey = requireGeminiApiKey();
 
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: systemInstruction }] as GeminiPart[] },

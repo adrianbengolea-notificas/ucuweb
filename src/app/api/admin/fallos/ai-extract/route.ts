@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
   if (!getGeminiApiKey()) {
     return NextResponse.json(
-      { error: 'GEMINI_API_KEY no configurada en .env.local' },
+      { error: 'GEMINI_API_KEY no configurada en el entorno del servidor' },
       { status: 503 }
     );
   }
