@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addReclamoComunicacion } from '@/lib/reclamos-store';
 import { sendEmail } from '@/lib/email';
+import { isPlausibleEmail } from '@/lib/utils';
 import {
   reclamoWriteForbiddenResponse,
   requireReclamoWriteAccess,
@@ -35,13 +36,19 @@ export async function POST(
     return NextResponse.json({ error: 'Asunto y cuerpo son requeridos' }, { status: 400 });
   }
 
-  const to = reclamo.denunciante.email;
+  const to = reclamo.denunciante.email?.trim() ?? '';
   if (!to) {
     return NextResponse.json({ error: 'El denunciante no tiene email registrado' }, { status: 400 });
   }
+  if (!isPlausibleEmail(to)) {
+    return NextResponse.json(
+      { error: `El email del denunciante no es válido: ${to}` },
+      { status: 400 }
+    );
+  }
 
   try {
-    await sendEmail({ to, subject, body: text });
+    const { id: messageId } = await sendEmail({ to, subject, body: text });
 
     await addReclamoComunicacion(reclamoId, {
       to,
@@ -53,7 +60,7 @@ export async function POST(
       viaIA,
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, messageId, to });
   } catch (error) {
     console.error('[comunicaciones]', error);
     return NextResponse.json(

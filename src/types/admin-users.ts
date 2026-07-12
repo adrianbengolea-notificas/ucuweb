@@ -8,6 +8,10 @@ export type AdminPermission =
   | 'posts:write'
   | 'comments:read'
   | 'comments:write'
+  | 'acciones:read'
+  | 'acciones:write'
+  | 'delegaciones:read'
+  | 'delegaciones:write'
   | 'fallos:read'
   | 'fallos:write'
   | 'reclamos:read'
@@ -41,4 +45,15 @@ export type AdminUserAuthRecord = AdminUser & {
   passwordHash?: string;
   legacyPasswordHash?: string;
   legacyUsername?: string;
+};
+
+/** Conexión OAuth de Google Drive por usuario admin (colección adminDriveConnections). */
+export type DriveConnection = {
+  /** Email de la cuenta Google autorizada (puede diferir del email admin) */
+  googleEmail: string;
+  /** Refresh token de larga duración — se usa para renovar access tokens */
+  refreshToken: string;
+  connectedAt: string;
+  /** Última vez que se corrió sync exitosamente para este usuario */
+  lastSyncAt?: string;
 };

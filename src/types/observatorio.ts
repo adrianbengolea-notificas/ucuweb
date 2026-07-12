@@ -15,6 +15,12 @@ export type FalloFile = {
   url: string;
 };
 
+export type FalloSubmitter = {
+  uid: string;
+  name: string;
+  email?: string;
+};
+
 export type FalloDocument = {
   nroExpediente: number;
   actor: string | null;
@@ -36,6 +42,7 @@ export type FalloDocument = {
   etiquetas: FalloNamed[];
   files: FalloFile[];
   pdfHash?: string;
+  submittedBy?: FalloSubmitter | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

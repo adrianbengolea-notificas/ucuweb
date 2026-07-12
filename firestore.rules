@@ -103,5 +103,25 @@ service cloud.firestore {
     match /admin_users/{id} {
       allow read, write: if false;
     }
+    match /acciones_colectivas/{slug} {
+      allow read: if true;
+      allow write: if false;
+      match /actualizaciones/{id} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+    match /delegaciones/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /colaboradores/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /fallo_comments/{id} {
+      allow read: if false;
+      allow write: if false;
+    }
   }
 }

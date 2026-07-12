@@ -48,6 +48,30 @@
         { "fieldPath": "idProvincia", "order": "ASCENDING" },
         { "fieldPath": "nombre", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "acciones_colectivas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "lastUpdateAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "actualizaciones",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "publishedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "fallo_comments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "falloId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

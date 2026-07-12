@@ -16,3 +16,20 @@ export function isFirebaseConfigured() {
   );
   return hasClientConfig || hasAdminConfig;
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function hasLikelyEmailTypo(email: string): boolean {
+  const domain = email.split('@')[1]?.toLowerCase() ?? '';
+  if (!domain) return true;
+  if (/\.(com|net|org)[a-z]{1,4}$/.test(domain) && !domain.endsWith('.com.ar')) return true;
+  if (domain.endsWith('.con') || domain.endsWith('.cmo') || domain.endsWith('.comm')) return true;
+  return false;
+}
+
+export function isPlausibleEmail(value: string): boolean {
+  const email = value.trim();
+  if (!EMAIL_RE.test(email) || email.includes('..') || email.length > 254) return false;
+  if (hasLikelyEmailTypo(email)) return false;
+  return true;
+}

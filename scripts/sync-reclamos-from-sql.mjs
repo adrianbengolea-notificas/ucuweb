@@ -10,6 +10,10 @@ import {
   buildGuidToNumericMap,
   computeAdminBandeja,
   loadCausasByGuid,
+  loadCausasRubros,
+  loadEmpresasRubros,
+  buildCausaValidationMaps,
+  sanitizeCausasForReclamo,
   loadCausasCatalog,
   loadComentariosByGuid,
   loadEstadosMap,
@@ -61,11 +65,13 @@ function initFirebase() {
 
 async function syncCatalogs(db, pool) {
   console.log('Sincronizando catálogos desde SQL…');
-  const [estados, grupos, causas, tipos] = await Promise.all([
+  const [estados, grupos, causas, tipos, causaRubroPairs, empresaRubroEntries] = await Promise.all([
     loadEstadosMap(pool),
     loadGruposEstados(pool),
     loadCausasCatalog(pool),
     loadTiposReclamos(pool),
+    loadCausasRubros(pool),
+    loadEmpresasRubros(pool),
   ]);
 
   console.log('Resumen catálogos SQL:', {
@@ -73,6 +79,8 @@ async function syncCatalogs(db, pool) {
     grupos: grupos.length,
     causas: causas.length,
     tipos: tipos.length,
+    causaRubroPairs: causaRubroPairs.length,
+    empresaRubroEntries: empresaRubroEntries.length,
   });
 
   if (dryRun) return;
@@ -82,6 +90,17 @@ async function syncCatalogs(db, pool) {
   await writeCatalogBatch(db, 'reclamos_causas', causas, dryRun);
   await writeCatalogBatch(db, 'reclamos_tipos', tipos, dryRun);
 
+  await db.collection('migration_meta').doc('reclamos_causas_rubros').set(
+    {
+      syncedAt: new Date().toISOString(),
+      causaRubroPairs,
+      empresaRubroEntries,
+      causaRubroCount: causaRubroPairs.length,
+      empresaRubroCount: empresaRubroEntries.length,
+    },
+    { merge: true }
+  );
+
   await db.collection('migration_meta').doc('reclamos_catalogs').set(
     {
       syncedAt: new Date().toISOString(),
@@ -90,6 +109,8 @@ async function syncCatalogs(db, pool) {
       gruposCount: grupos.length,
       causasCount: causas.length,
       tiposCount: tipos.length,
+      causaRubroPairsCount: causaRubroPairs.length,
+      empresaRubroEntriesCount: empresaRubroEntries.length,
     },
     { merge: true }
   );
@@ -103,14 +124,19 @@ async function enrichReclamos(db, pool) {
     buildGuidToNumericMap(pool),
   ]);
 
-  const [historicoByGuid, comentariosByGuid, responsablesByGuid, causasByGuid, enlacesByGuid] =
+  const [historicoByGuid, comentariosByGuid, responsablesByGuid, causasByGuid, enlacesByGuid, causaRubroPairs, empresaRubroEntries, causasCatalog] =
     await Promise.all([
       loadHistoricoByGuid(pool, estados, personas),
       loadComentariosByGuid(pool, personas),
       loadResponsablesByGuid(pool, personas),
       loadCausasByGuid(pool),
       loadEnlacesByGuid(pool),
+      loadCausasRubros(pool),
+      loadEmpresasRubros(pool),
+      loadCausasCatalog(pool),
     ]);
+
+  const causaMaps = buildCausaValidationMaps(causaRubroPairs, empresaRubroEntries, causasCatalog);
 
   console.log('Mapas cargados:', {
     reclamos: guidMaps.guidToId.size,
@@ -140,7 +166,11 @@ async function enrichReclamos(db, pool) {
     const historialEstados = historicoByGuid.get(guid) ?? current.historialEstados ?? [];
     const comentarios = comentariosByGuid.get(guid) ?? [];
     const responsable = responsablesByGuid.get(guid) ?? null;
-    const causas = causasByGuid.get(guid) ?? [];
+    const causasRaw = causasByGuid.get(guid) ?? [];
+    const { causas, removidas } = sanitizeCausasForReclamo(
+      { ...current, causas: causasRaw },
+      causaMaps
+    );
     const enlaces = enlacesByGuid.get(guid);
     const estado = estados.byId.get(current.idCasoEstado);
 
@@ -150,6 +180,9 @@ async function enrichReclamos(db, pool) {
       comentarios,
       responsable,
       causas,
+      ...(removidas.length
+        ? { causasLegacyRemovidas: removidas, causasFixSource: 'sql_v2_enrich' }
+        : {}),
       googleDrive: enlaces?.googleDrive,
       googleDriveSentencia: enlaces?.googleDriveSentencia,
       numeroExpediente: enlaces?.numeroExpediente,

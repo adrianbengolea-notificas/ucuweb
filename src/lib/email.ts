@@ -5,7 +5,7 @@ import { Resend } from 'resend';
 function getResend(): Resend {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key || key.startsWith('re_REEMPLAZAR')) {
-    throw new Error('RESEND_API_KEY no configurada en .env.local');
+    throw new Error('RESEND_API_KEY no configurada en el entorno del servidor');
   }
   return new Resend(key);
 }
@@ -13,7 +13,7 @@ function getResend(): Resend {
 function getFromEmail(): string {
   return (
     process.env.RESEND_FROM_EMAIL?.trim() ||
-    'UCU Usuarios Protegidos <reclamos@consumidoresprotegidos.com.ar>'
+    'UCU Usuarios Protegidos <reclamos@ucu.org.ar>'
   );
 }
 
@@ -23,10 +23,10 @@ export type SendEmailOptions = {
   body: string;
 };
 
-export async function sendEmail(opts: SendEmailOptions): Promise<void> {
+export async function sendEmail(opts: SendEmailOptions): Promise<{ id: string }> {
   const resend = getResend();
   const html = bodyToHtml(opts.body);
-  const { error } = await resend.emails.send({
+  const { data, error } = await resend.emails.send({
     from: getFromEmail(),
     to: opts.to,
     subject: opts.subject,
@@ -34,6 +34,8 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
     text: opts.body,
   });
   if (error) throw new Error(error.message);
+  if (!data?.id) throw new Error('Resend no devolvió ID de mensaje');
+  return { id: data.id };
 }
 
 // Convierte texto plano con saltos de línea a HTML simple con el estilo UCU

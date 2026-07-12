@@ -11,7 +11,7 @@ env:
       - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: AIzaSyAoOO8GG9iA-7-UiFsSjkfHGAMFkhlE0uA
+    secret: NEXT_PUBLIC_FIREBASE_API_KEY
     availability:
       - BUILD
       - RUNTIME
@@ -87,5 +87,20 @@ env:
 
   - variable: ADMIN_PANEL_PASSWORD
     secret: ADMIN_PANEL_PASSWORD
+    availability:
+      - RUNTIME
+
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+    availability:
+      - RUNTIME
+
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+    availability:
+      - RUNTIME
+
+  - variable: RESEND_FROM_EMAIL
+    value: UCU Usuarios Protegidos <reclamos@ucu.org.ar>
     availability:
       - RUNTIME

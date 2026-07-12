@@ -117,7 +117,7 @@ export default function BuscarFallosPage() {
               meta.geminiConfigured ? 'bg-sky-100 text-sky-800' : 'bg-red-100 text-red-800'
             }`}
           >
-            {meta.geminiConfigured ? 'Gemini configurado' : 'Falta GEMINI_API_KEY en .env.local'}
+            {meta.geminiConfigured ? 'Gemini configurado' : 'Falta GEMINI_API_KEY en el servidor'}
           </span>
         </div>
       )}

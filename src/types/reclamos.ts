@@ -132,6 +132,27 @@ export type ReclamoEnlacesExternos = {
   sentencia?: string;
 };
 
+export type SugerenciaDriveEstado = 'pendiente' | 'confirmada' | 'descartada';
+
+export type SugerenciaDrive = {
+  id: string;
+  reclamoId: number;
+  /** ID del archivo en Google Drive */
+  archivoId: string;
+  archivoNombre: string;
+  archivoUrl: string;
+  /** Movimiento sugerido por Gemini en lenguaje natural */
+  movimientoSugerido: string;
+  /** Razonamiento de la IA para la sugerencia */
+  razonamiento: string;
+  /** ID de estado sugerido (opcional — puede no haber match exacto) */
+  estadoSugeridoId?: number;
+  fechaDeteccion: string;
+  estado: SugerenciaDriveEstado;
+  confirmedByEmail?: string;
+  confirmedAt?: string;
+};
+
 export type StoredReclamoDocument = {
   id: number;
   legacyGuid?: string;
@@ -156,6 +177,10 @@ export type StoredReclamoDocument = {
   googleDrive?: string;
   /** URL de sentencia en Drive (origen SQL: google_drive_sentencia). */
   googleDriveSentencia?: string;
+  /** ID de la carpeta de Google Drive vinculada para sync automático via IA. */
+  driveFolderId?: string;
+  /** ISO string de la última vez que se chequearon archivos nuevos en Drive. */
+  driveLastCheckedAt?: string;
   /** Número de expediente judicial (origen SQL: numero_expendiente). */
   numeroExpediente?: string;
   idJuzgado?: number;

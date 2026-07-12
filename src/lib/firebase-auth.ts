@@ -31,3 +31,9 @@ export async function signInWithGoogleIdToken(): Promise<string> {
   const idToken = await result.user.getIdToken();
   return idToken;
 }
+
+export async function signOutFromGoogle(): Promise<void> {
+  const auth = getClientAuth();
+  if (!auth) return;
+  await auth.signOut();
+}

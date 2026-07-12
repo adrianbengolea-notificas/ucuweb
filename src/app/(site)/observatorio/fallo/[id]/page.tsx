@@ -2,8 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FalloPdfViewer } from '@/components/observatorio/FalloPdfViewer';
+import { FalloCommentSection } from '@/components/observatorio/FalloCommentSection';
 import { resolveFalloFileUrl } from '@/lib/fallos-files';
-import { formatDemandado, formatMonto, getFalloById } from '@/lib/observatorio';
+import {
+  buildFalloShareTitle,
+  formatDemandado,
+  formatMonto,
+  getFalloById,
+} from '@/lib/observatorio';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +25,23 @@ export async function generateMetadata({
     return { title: 'Fallo no encontrado — Observatorio UCU' };
   }
 
+  const shareTitle = buildFalloShareTitle(fallo);
+  const shareDescription =
+    fallo.resumen?.slice(0, 160) || 'Detalle del fallo jurisprudencial en defensa del consumidor.';
+
   return {
-    title: `${fallo.actor || 'Fallo'} — Observatorio UCU`,
-    description: fallo.resumen?.slice(0, 160) || 'Detalle del fallo jurisprudencial.',
+    title: shareTitle,
+    description: shareDescription,
+    openGraph: {
+      title: shareTitle,
+      description: shareDescription,
+      type: 'article',
+    },
+    twitter: {
+      card: 'summary',
+      title: shareTitle,
+      description: shareDescription,
+    },
   };
 }
 
@@ -129,7 +149,16 @@ export default async function FalloDetailPage({
             </div>
           </section>
         ) : null}
+
+        {fallo.submittedBy ? (
+          <p className="mt-6 text-sm text-slate-500">
+            Aportado por{' '}
+            <span className="font-medium text-slate-700">{fallo.submittedBy.name}</span>
+          </p>
+        ) : null}
       </article>
+
+      <FalloCommentSection falloId={fallo.nroExpediente} />
     </main>
   );
 }

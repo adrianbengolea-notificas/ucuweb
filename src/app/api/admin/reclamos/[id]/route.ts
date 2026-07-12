@@ -13,6 +13,10 @@ import {
 } from '@/lib/reclamos-store';
 import { computeAdminBandeja } from '@/lib/reclamos-admin';
 import {
+  loadReclamoCausasValidationMaps,
+  validateReclamoCausas,
+} from '@/lib/reclamos-causas-validate';
+import {
   canWriteReclamo,
   reclamoWriteForbiddenResponse,
   requireReclamoWriteAccess,
@@ -34,10 +38,11 @@ export async function GET(
   }
 
   try {
-    const [reclamo, estados, grupos] = await Promise.all([
+    const [reclamo, estados, grupos, validationMaps] = await Promise.all([
       getReclamoByIdFromFirestore(reclamoId),
       getReclamoEstadosFromFirestore(),
       getReclamoGruposEstadosFromFirestore(),
+      loadReclamoCausasValidationMaps(),
     ]);
     if (!reclamo) {
       return NextResponse.json({ error: 'Reclamo no encontrado' }, { status: 404 });
@@ -45,6 +50,7 @@ export async function GET(
 
     const canWrite = await canWriteReclamo(session, reclamo);
     const delegados = canWrite ? await listReclamosDelegados() : [];
+    const causasValidacion = validateReclamoCausas(reclamo, validationMaps);
 
     return NextResponse.json({
       reclamo: {
@@ -55,6 +61,7 @@ export async function GET(
       grupos,
       canWrite,
       delegados,
+      causasValidacion,
     });
   } catch (error) {
     console.error(error);

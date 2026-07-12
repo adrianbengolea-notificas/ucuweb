@@ -6,6 +6,8 @@ import { DuplicateFalloPdfError } from '@/lib/fallo-pdf-duplicate-error';
 import { duplicateFalloPdfResponse } from '@/lib/fallo-pdf-duplicate-response';
 import { readFalloFormBody, validateFalloPdfFile } from '@/lib/fallo-request-body';
 import { buildFalloDocumentFromForm } from '@/lib/observatorio-normalize';
+import { requireColaboradorSession } from '@/lib/colaborador-session';
+import { incrementColaboradorStats } from '@/lib/colaboradores-store';
 import {
   loadCatalogLookupsForFallo,
   reserveNextExpediente,
@@ -44,7 +46,20 @@ export async function POST(request: NextRequest) {
     fallo.files = [fileEntry];
     fallo.pdfHash = pdfHash;
 
+    const colaborador = requireColaboradorSession(request);
+    if (colaborador) {
+      fallo.submittedBy = {
+        uid: colaborador.uid,
+        name: colaborador.name,
+        email: colaborador.email,
+      };
+    }
+
     await saveFalloDocument(fallo);
+
+    if (colaborador) {
+      await incrementColaboradorStats(colaborador.uid, { fallos: 1 });
+    }
 
     return NextResponse.json({
       ok: true,
