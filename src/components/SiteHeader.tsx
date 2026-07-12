@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils';
 
 const mainNav = [
   { href: '/', label: 'Inicio' },
-  { href: '/planes-de-ahorro-son-una-trampa', label: 'Campaña' },
   { href: '/posts', label: 'Noticias' },
   { href: '/reclamos', label: 'Reclamos' },
   { href: '/observatorio', label: 'Observatorio' },
