@@ -111,9 +111,10 @@ env:
     availability:
       - RUNTIME
 
-  # Opcional: agregar cuando tengas dominio inbound en Resend (ej. xxxx.resend.app)
-  # - variable: RESEND_INBOUND_DOMAIN
-  #   secret: RESEND_INBOUND_DOMAIN
+  - variable: RESEND_INBOUND_DOMAIN
+    secret: RESEND_INBOUND_DOMAIN
+    availability:
+      - RUNTIME
 
   - variable: RESEND_INBOUND_LOCAL_PART
     value: reclamos
