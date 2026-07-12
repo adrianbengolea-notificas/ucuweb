@@ -13,7 +13,7 @@ function getResend(): Resend {
 function getFromEmail(): string {
   return (
     process.env.RESEND_FROM_EMAIL?.trim() ||
-    'UCU Usuarios Protegidos <reclamos@consumidoresprotegidos.com.ar>'
+    'UCU Usuarios Protegidos <reclamos@ucu.org.ar>'
   );
 }
 

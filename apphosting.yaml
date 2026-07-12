@@ -101,6 +101,6 @@ env:
       - RUNTIME
 
   - variable: RESEND_FROM_EMAIL
-    value: UCU Usuarios Protegidos <reclamos@consumidoresprotegidos.com.ar>
+    value: UCU Usuarios Protegidos <reclamos@ucu.org.ar>
     availability:
       - RUNTIME
