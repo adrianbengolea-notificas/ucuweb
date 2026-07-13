@@ -12,6 +12,7 @@ import {
   getTiposJuicioFromFirestore,
   hasObservatorioInFirestore,
 } from '@/lib/observatorio-store';
+import { isCanastaBasicaDivisa } from '@/lib/observatorio-divisas-shared';
 import type {
   CiudadOption,
   DivisaOption,
@@ -219,12 +220,36 @@ export function formatMonto(fallo: FalloDocument): string | null {
 
   if (!total) return null;
 
-  const code = fallo.divisa?.codigo ?? 'ARS';
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: code === 'ARS' ? 'ARS' : code,
-    maximumFractionDigits: 0,
+  const amount = new Intl.NumberFormat('es-AR', {
+    maximumFractionDigits: total % 1 === 0 ? 0 : 2,
   }).format(total);
+
+  const code = (fallo.divisa?.codigo ?? 'ARS').toUpperCase();
+  const nombre = fallo.divisa?.nombre ?? '';
+
+  if (isCanastaBasicaDivisa(fallo.divisa) || code === 'CBA') {
+    return `${amount} canasta${total === 1 ? '' : 's'} básica${total === 1 ? '' : 's'}`;
+  }
+  if (code === 'SMV' || nombre.toLowerCase().includes('salario')) {
+    return `${amount} SMVM`;
+  }
+  if (code === 'ARS' || !code) {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      maximumFractionDigits: 0,
+    }).format(total);
+  }
+
+  try {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 0,
+    }).format(total);
+  } catch {
+    return `${amount} ${nombre || code}`;
+  }
 }
 
 export function parseSearchParams(

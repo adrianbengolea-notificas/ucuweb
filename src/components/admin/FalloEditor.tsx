@@ -13,6 +13,13 @@ import type { StoredFalloDocument } from '@/types/observatorio';
 import type { FalloAiExtractedForm } from '@/types/fallo-ai';
 import { FalloAiImport } from '@/components/admin/FalloAiImport';
 import { FalloPdfUpload, type FalloPdfDuplicateInfo } from '@/components/admin/FalloPdfUpload';
+import {
+  DIVISA_CANASTA_CODIGO,
+  DIVISA_PESOS_CODIGO,
+  findDivisaIdByCodigo,
+  isCanastaBasicaDivisa,
+  isPesosDivisa,
+} from '@/lib/observatorio-divisas-shared';
 
 type FalloEditorProps = {
   mode: 'create' | 'edit';
@@ -132,6 +139,9 @@ export function FalloEditor({
   const [etiquetas, setEtiquetas] = useState<SelectOption[]>([]);
   const [empresas, setEmpresas] = useState<SelectOption[]>([]);
   const [divisas, setDivisas] = useState<SelectOption[]>([]);
+  const [divisaCatalog, setDivisaCatalog] = useState<
+    { id: number; codigo: string; nombre: string }[]
+  >([]);
   const [provincias, setProvincias] = useState<SelectOption[]>([]);
   const [ciudades, setCiudades] = useState<SelectOption[]>([]);
   const [juzgados, setJuzgados] = useState<SelectOption[]>([]);
@@ -239,13 +249,26 @@ export function FalloEditor({
           setProvincias(mapOptions(provinciasResult.value, 'id', 'nombre'));
         }
         if (divisasResult.status === 'fulfilled') {
-          setDivisas(
+          const catalog: { id: number; codigo: string; nombre: string }[] =
             divisasResult.value.map(
-              (item: { id: number; codigo?: string; nombre?: string; codigoDivisa?: string; nombreDivisa?: string }) => ({
-                value: String(item.id),
-                label: `${item.nombre ?? item.nombreDivisa ?? ''} (${item.codigo ?? item.codigoDivisa ?? ''})`,
+              (item: {
+                id: number;
+                codigo?: string;
+                nombre?: string;
+                codigoDivisa?: string;
+                nombreDivisa?: string;
+              }) => ({
+                id: item.id,
+                codigo: item.codigo ?? item.codigoDivisa ?? '',
+                nombre: item.nombre ?? item.nombreDivisa ?? '',
               })
-            )
+            );
+          setDivisaCatalog(catalog);
+          setDivisas(
+            catalog.map((entry) => ({
+              value: String(entry.id),
+              label: `${entry.nombre} (${entry.codigo})`,
+            }))
           );
         }
 
@@ -470,6 +493,13 @@ export function FalloEditor({
   const inputClass =
     'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#1a5fb4]';
 
+  const selectedDivisa = divisaCatalog.find((item) => String(item.id) === form.divisaId);
+  const isPesosUnit = isPesosDivisa(selectedDivisa ?? { codigo: form.divisaId === '7' ? 'ARS' : '' });
+  const isCanastaUnit = isCanastaBasicaDivisa(
+    selectedDivisa ?? { codigo: form.divisaId === '163' ? 'CBA' : '' }
+  );
+  const showOtherDivisa = Boolean(form.divisaId) && !isPesosUnit && !isCanastaUnit;
+
   if (initializing) {
     return (
       <div className="flex justify-center py-16">
@@ -668,12 +698,6 @@ export function FalloEditor({
           onChange={(value) => updateForm('juzgadoId', value)}
           disabled={!form.ciudadId}
         />
-        <SearchableSelect
-          label="Divisa"
-          value={form.divisaId}
-          options={divisas}
-          onChange={(value) => updateForm('divisaId', value)}
-        />
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-700">Fecha (DD/MM/AAAA)</span>
           <input
@@ -712,14 +736,71 @@ export function FalloEditor({
             className={inputClass}
           />
         </label>
-        <label className="block">
+        <div className="block md:col-span-2">
           <span className="mb-1 block text-sm font-medium text-slate-700">Daño punitivo</span>
-          <input
-            value={form.punitivo}
-            onChange={(e) => updateForm('punitivo', e.target.value)}
-            className={inputClass}
-          />
-        </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+            <input
+              value={form.punitivo}
+              onChange={(e) => updateForm('punitivo', e.target.value)}
+              className={`${inputClass} sm:max-w-[220px]`}
+              inputMode="decimal"
+              placeholder="0.00"
+              aria-label="Monto de daño punitivo"
+            />
+            <div
+              className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1"
+              role="group"
+              aria-label="Unidad del daño punitivo"
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  updateForm(
+                    'divisaId',
+                    findDivisaIdByCodigo(divisaCatalog, DIVISA_PESOS_CODIGO) || '7'
+                  )
+                }
+                className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                  isPesosUnit
+                    ? 'bg-white text-[#1a5fb4] shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Pesos
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  updateForm(
+                    'divisaId',
+                    findDivisaIdByCodigo(divisaCatalog, DIVISA_CANASTA_CODIGO) || '163'
+                  )
+                }
+                className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                  isCanastaUnit
+                    ? 'bg-white text-[#1a5fb4] shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Canastas básicas
+              </button>
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-slate-500">
+            Elegí la unidad en la que se fijó el daño punitivo. Si el fallo habla de canastas
+            básicas, usá esa opción (también aplica a la visualización de los montos).
+          </p>
+          {showOtherDivisa ? (
+            <div className="mt-3 max-w-md">
+              <SearchableSelect
+                label="Otra unidad / moneda"
+                value={form.divisaId}
+                options={divisas}
+                onChange={(value) => updateForm('divisaId', value)}
+              />
+            </div>
+          ) : null}
+        </div>
         <label className="block md:col-span-2">
           <span className="mb-1 flex items-center justify-between gap-3 text-sm font-medium text-slate-700">
             <span>Resumen *</span>

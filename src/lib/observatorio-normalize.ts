@@ -16,6 +16,28 @@ export function formatTodayFecha(): string {
   return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
 }
 
+/** Normaliza createdAt (ISO o DD/MM/AAAA) a ISO comparable para orden de carga. */
+export function parseCreatedAtSort(value: string | null | undefined): string {
+  if (!value?.trim()) return new Date(0).toISOString();
+  const trimmed = value.trim();
+  if (trimmed.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
+  }
+  return parseFechaSort(trimmed);
+}
+
+export function compareFallosByCreatedAtDesc(
+  a: { createdAt?: string | null; updatedAt?: string | null; nroExpediente?: number },
+  b: { createdAt?: string | null; updatedAt?: string | null; nroExpediente?: number }
+): number {
+  const aKey = parseCreatedAtSort(a.createdAt || a.updatedAt);
+  const bKey = parseCreatedAtSort(b.createdAt || b.updatedAt);
+  const byDate = bKey.localeCompare(aKey);
+  if (byDate !== 0) return byDate;
+  return (b.nroExpediente ?? 0) - (a.nroExpediente ?? 0);
+}
+
 export function normalizeFalloDocument(
   input: FalloDocument,
   status: 'publish' | 'draft' = 'publish'
@@ -73,7 +95,7 @@ export function buildFalloDocumentFromForm(
   },
   existing?: StoredFalloDocument
 ): StoredFalloDocument {
-  const now = formatTodayFecha();
+  const now = new Date().toISOString();
 
   const mapEmpresa = (id: number) => {
     const item = catalogs.empresas.get(id);

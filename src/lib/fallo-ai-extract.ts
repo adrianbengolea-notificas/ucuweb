@@ -12,6 +12,11 @@ import {
   getTiposJuicioFromFirestore,
 } from '@/lib/observatorio-store';
 import { extractFalloFromPdf, extractFalloResumenFromPdf, type FalloAiRawExtraction } from '@/lib/gemini';
+import {
+  DIVISA_CANASTA_CODIGO,
+  DIVISA_PESOS_CODIGO,
+  resolveDivisaCodigoFromText,
+} from '@/lib/observatorio-divisas-shared';
 import type { FalloAiExtractedForm, FalloAiExtractResult } from '@/types/fallo-ai';
 import type { ProvinciaOption } from '@/types/observatorio';
 
@@ -368,10 +373,17 @@ export async function extractFalloFormFromPdf(pdfBuffer: Buffer): Promise<FalloA
     warnings.push(`Tribunal (completar manualmente): ${raw.juzgado}`);
   }
 
+  const resolvedDivisaCodigo = resolveDivisaCodigoFromText(raw.divisaCodigo);
+
   const divisa =
+    findBestMatch(resolvedDivisaCodigo, divisas, (d) => d.codigo) ??
+    findBestMatch(resolvedDivisaCodigo, divisas, (d) => d.nombre) ??
     findBestMatch(raw.divisaCodigo, divisas, (d) => d.codigo) ??
     findBestMatch(raw.divisaCodigo, divisas, (d) => d.nombre) ??
-    divisas.find((d) => d.codigo === 'ARS') ??
+    (resolvedDivisaCodigo === DIVISA_CANASTA_CODIGO
+      ? divisas.find((d) => d.codigo.toUpperCase() === DIVISA_CANASTA_CODIGO)
+      : null) ??
+    divisas.find((d) => d.codigo === DIVISA_PESOS_CODIGO) ??
     null;
 
   const fecha = normalizeFecha(raw.fecha);

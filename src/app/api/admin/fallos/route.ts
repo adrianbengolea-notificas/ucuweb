@@ -32,8 +32,9 @@ export async function GET(request: NextRequest) {
         actor: fallo.actor,
         resumen: fallo.resumen,
         fecha: fallo.fecha,
-        status: fallo.status,
+        createdAt: fallo.createdAt,
         updatedAt: fallo.updatedAt,
+        status: fallo.status,
       })),
     });
   } catch {

@@ -2,7 +2,11 @@ import 'server-only';
 
 import { fixEncodingDeep } from '@/lib/fix-encoding';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { normalizeFalloDocument, repairStoredFalloDocument } from '@/lib/observatorio-normalize';
+import {
+  compareFallosByCreatedAtDesc,
+  normalizeFalloDocument,
+  repairStoredFalloDocument,
+} from '@/lib/observatorio-normalize';
 import type {
   CiudadOption,
   DivisaOption,
@@ -103,14 +107,11 @@ export async function getFallosFromFirestore(
   params: FalloSearchParams = {}
 ): Promise<FallosResponse> {
   const db = dbOrThrow();
-  const snap = await db
-    .collection('fallos')
-    .where('status', '==', 'publish')
-    .orderBy('fechaSort', 'desc')
-    .get();
+  // Se traen publicados y se ordenan por fecha de carga (createdAt), no por fecha de sentencia.
+  const snap = await db.collection('fallos').where('status', '==', 'publish').get();
 
   const items = snap.docs.map((doc) => doc.data() as StoredFalloDocument);
-  const filtered = applyFilters(items, params);
+  const filtered = applyFilters(items, params).sort(compareFallosByCreatedAtDesc);
   const offset = params.offset ?? 10;
   const page = params.page ?? 1;
   const totalRows = filtered.length;
@@ -125,12 +126,14 @@ export async function getFallosFromFirestore(
   };
 }
 
-export async function listAdminFallos(limit = 500): Promise<StoredFalloDocument[]> {
+export async function listAdminFallos(limit = 2000): Promise<StoredFalloDocument[]> {
   const db = dbOrThrow();
-  const snap = await db.collection('fallos').orderBy('fechaSort', 'desc').limit(limit).get();
+  const snap = await db.collection('fallos').get();
   return snap.docs
     .map((doc) => fixEncodingDeep(doc.data() as StoredFalloDocument))
-    .filter((item) => !item.deletedAt);
+    .filter((item) => !item.deletedAt)
+    .sort(compareFallosByCreatedAtDesc)
+    .slice(0, limit);
 }
 
 export async function getStoredFalloById(id: number): Promise<StoredFalloDocument | null> {
@@ -251,6 +254,11 @@ export async function getEmpresasFromFirestore(): Promise<EmpresaOption[]> {
 }
 
 export async function getDivisasFromFirestore(): Promise<DivisaOption[]> {
+  const { ensureCanastaBasicaDivisa, DIVISA_CANASTA_CODIGO } = await import(
+    '@/lib/observatorio-divisas'
+  );
+  const canasta = await ensureCanastaBasicaDivisa();
+
   const items = await readCatalog<{
     id: number;
     codigo?: string;
@@ -259,14 +267,18 @@ export async function getDivisasFromFirestore(): Promise<DivisaOption[]> {
     nombreDivisa?: string;
     pais?: string;
   }>(CATALOG_COLLECTIONS.divisas);
-  return items
-    .map((item) => ({
-      id: item.id,
-      codigo: item.codigo ?? item.codigoDivisa ?? '',
-      nombre: item.nombre ?? item.nombreDivisa ?? '',
-      pais: item.pais,
-    }))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const mapped: DivisaOption[] = items.map((item) => ({
+    id: item.id,
+    codigo: item.codigo ?? item.codigoDivisa ?? '',
+    nombre: item.nombre ?? item.nombreDivisa ?? '',
+    pais: item.pais,
+  }));
+
+  if (!mapped.some((item) => item.codigo.toUpperCase() === DIVISA_CANASTA_CODIGO)) {
+    mapped.push(canasta);
+  }
+
+  return mapped.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 export async function getNextCatalogId(type: ObservatorioCatalogType): Promise<number> {

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { getAdminDb } from '@/lib/firebase-admin';
+import { compareFallosByCreatedAtDesc } from '@/lib/observatorio-normalize';
 import type { StoredFalloDocument } from '@/types/observatorio';
 import type {
   FalloSearchFilters,
@@ -319,7 +320,7 @@ export async function searchFallosIndex(
     return true;
   });
 
-  filtered.sort((a, b) => b.fechaSort.localeCompare(a.fechaSort));
+  filtered.sort(compareFallosByCreatedAtDesc);
   const hits = filtered.map(toHit);
 
   return {

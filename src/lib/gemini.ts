@@ -193,8 +193,14 @@ Reglas:
 - Extraé solo datos que figuren explícitamente en el documento; no inventes.
 - Si un dato no está claro, devolvé null o array vacío y agregá una nota en pendienteManual.
 - firmActor=true si el actor/demandante es empresa; personDemandado=true si el demandado es persona física.
-- Montos en formato decimal con punto (ej. "15000.00"); si no hay monto, null.
+- Montos en formato decimal con punto (ej. "15000.00" o "10" canastas); si no hay monto, null.
 - fecha en formato DD/MM/AAAA si se puede determinar.
+- divisaCodigo (OBLIGATORIO si hay montos, especialmente daño punitivo):
+  * Si el fallo condena o fija montos en "canastas básicas", "canasta básica", "canasta básica total", CBA o similar → "CBA".
+  * Si están en pesos argentinos / $ → "ARS".
+  * Si están en salarios mínimos (SMVM / SMV) → "SMV".
+  * Si están en dólares → "USD".
+  * Hoy es frecuente que el daño punitivo se fije en canastas básicas: priorizá CBA cuando el texto lo diga, aunque también mencione un equivalente en pesos.
 - rubros, causas, etiquetas y tipoJuicio: usá nombres del catálogo provisto cuando correspondan; si no hay match claro, proponé el más cercano o dejá vacío.
 - resumen: OBLIGATORIO. Máximo 400 caracteres. Es el campo más importante.
   * DEBE describir QUÉ RESOLVIÓ el tribunal (dispositiva: hizo lugar, rechazó, ordenó, condenó, declaró, etc.) y POR QUÉ (fundamentos jurídicos sustantivos en una frase: ley aplicada, derecho invocado, razón de la decisión).
@@ -238,10 +244,10 @@ Forma JSON:
   "provincia": "nombre del catálogo; Justicia Federal o Justicia Nacional si corresponde, o provincia geográfica",
   "ciudad": "sede/ciudad del tribunal (ej. Rosario) o null",
   "juzgado": "nombre completo del tribunal o null",
-  "punitivo": "0.00 o null",
-  "moral": "0.00 o null",
-  "patrimonial": "0.00 o null",
-  "divisaCodigo": "ARS u otro código o null",
+  "punitivo": "cantidad numérica o null",
+  "moral": "cantidad numérica o null",
+  "patrimonial": "cantidad numérica o null",
+  "divisaCodigo": "CBA si canastas básicas; ARS si pesos; SMV si salarios mínimos; USD si dólares; o null",
   "dispositiva": "texto breve de la resolución/dispositiva o null",
   "hayResolucionSustantiva": true,
   "resumen": "borrador breve; será refinado en paso aparte",

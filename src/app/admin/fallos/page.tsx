@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import { useAdminUser } from '@/components/admin/AdminAuth';
 
@@ -10,8 +10,42 @@ type AdminFallo = {
   actor: string | null;
   resumen: string;
   fecha: string;
+  createdAt?: string;
+  updatedAt?: string;
   status: string;
 };
+
+function parseCargaTime(value: string | undefined): number {
+  if (!value?.trim()) return 0;
+  const trimmed = value.trim();
+  if (trimmed.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const t = Date.parse(trimmed);
+    return Number.isNaN(t) ? 0 : t;
+  }
+  const parts = trimmed.split('/');
+  if (parts.length !== 3) return 0;
+  const [day, month, year] = parts.map(Number);
+  if (!day || !month || !year) return 0;
+  return new Date(year, month - 1, day).getTime();
+}
+
+function formatCargaLabel(fallo: AdminFallo): string {
+  const raw = fallo.createdAt || fallo.updatedAt;
+  if (!raw?.trim()) return '—';
+  const trimmed = raw.trim();
+  if (trimmed.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const date = new Date(trimmed);
+    if (Number.isNaN(date.getTime())) return trimmed;
+    return date.toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+  return trimmed;
+}
 
 export default function AdminFallosPage() {
   const user = useAdminUser();
@@ -30,7 +64,14 @@ export default function AdminFallosPage() {
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
       if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-      setFallos(data.fallos || []);
+      const items = (data.fallos || []) as AdminFallo[];
+      items.sort((a, b) => {
+        const diff =
+          parseCargaTime(b.createdAt || b.updatedAt) - parseCargaTime(a.createdAt || a.updatedAt);
+        if (diff !== 0) return diff;
+        return b.nroExpediente - a.nroExpediente;
+      });
+      setFallos(items);
     } catch (err) {
       setFallos([]);
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los fallos');
@@ -66,17 +107,22 @@ export default function AdminFallosPage() {
     }
   }
 
-  const filtered = fallos.filter((fallo) => {
-    const haystack = `${fallo.nroExpediente} ${fallo.actor ?? ''} ${fallo.resumen}`.toLowerCase();
-    return haystack.includes(query.toLowerCase());
-  });
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return fallos.filter((fallo) => {
+      const haystack = `${fallo.nroExpediente} ${fallo.actor ?? ''} ${fallo.resumen}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [fallos, query]);
 
   return (
     <div>
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Fallos del observatorio</h1>
-          <p className="mt-1 text-slate-500">{fallos.length} fallos en total</p>
+          <p className="mt-1 text-slate-500">
+            {fallos.length} fallos en total · ordenados por fecha de carga
+          </p>
         </div>
         <Link
           href="/admin/fallos/nuevo"
@@ -118,7 +164,8 @@ export default function AdminFallosPage() {
                 <th className="px-4 py-3 font-semibold">Expediente</th>
                 <th className="px-4 py-3 font-semibold">Actor</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
-                <th className="px-4 py-3 font-semibold">Fecha</th>
+                <th className="px-4 py-3 font-semibold">Cargado</th>
+                <th className="px-4 py-3 font-semibold">Sentencia</th>
                 <th className="px-4 py-3 font-semibold">Acciones</th>
               </tr>
             </thead>
@@ -138,7 +185,8 @@ export default function AdminFallosPage() {
                       {fallo.status === 'publish' ? 'Publicado' : 'Borrador'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{fallo.fecha}</td>
+                  <td className="px-4 py-3 font-medium text-slate-700">{formatCargaLabel(fallo)}</td>
+                  <td className="px-4 py-3 text-slate-500">{fallo.fecha || '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <Link
