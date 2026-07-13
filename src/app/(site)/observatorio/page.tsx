@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { FalloList, ObservatorioHero } from '@/components/observatorio/FalloCard';
 import { SectionHeader } from '@/components/ui/PageHeader';
 import { getFallos } from '@/lib/observatorio';
@@ -25,26 +24,6 @@ export default async function ObservatorioPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-12 lg:px-6">
       <ObservatorioHero />
-
-      <section className="ucu-card mt-12 p-8">
-        <h2 className="font-display text-2xl font-bold tracking-tight text-[var(--ink)] md:text-3xl">
-          ¿Qué es el observatorio?
-        </h2>
-        <p className="mt-4 max-w-prose font-serif text-base leading-relaxed text-[var(--ink-muted)] md:text-lg">
-          Es un proyecto comunitario organizado por Usuarios y Consumidores Unidos cuyo objetivo
-          es contener y compilar la mayor cantidad de antecedentes jurisprudenciales en materia de
-          defensa del consumidor.
-        </p>
-        <Link href="/observatorio/buscar" className="ucu-btn-primary mt-6">
-          Ir al buscador
-        </Link>
-        <Link
-          href="/observatorio/nuevo"
-          className="ucu-btn-secondary mt-4 inline-flex"
-        >
-          Cargar un nuevo fallo
-        </Link>
-      </section>
 
       <section className="mt-14">
         <SectionHeader
