@@ -49,3 +49,15 @@ export function buildResponsable(
 export function resolveAdminBandeja(doc: StoredReclamoDocument): ReclamoAdminBandeja {
   return doc.adminBandeja ?? computeAdminBandeja(doc);
 }
+
+export function resolveArchivadoEstado(
+  estados: { id: number; descripcion: string; idGrupoEstado: number }[]
+): { id: number; descripcion: string; idGrupoEstado: number } | null {
+  const archivados = estados.filter((item) => item.idGrupoEstado === RECLAMO_GRUPO_ARCHIVADO);
+  if (!archivados.length) return null;
+
+  const preferido = archivados.find((item) =>
+    item.descripcion.toLowerCase().includes('archiv')
+  );
+  return preferido ?? archivados[0];
+}

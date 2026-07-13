@@ -3,6 +3,7 @@ import { listReclamosDelegados } from '@/lib/admin-users-store';
 import { requireAdminPermission } from '@/lib/admin-session';
 import {
   addReclamoComentario,
+  archivarReclamo,
   getReclamoByIdFromFirestore,
   getReclamoEstadosFromFirestore,
   getReclamoGruposEstadosFromFirestore,
@@ -87,6 +88,21 @@ export async function PATCH(
     if (body?.iniciarGestion === true) {
       const estados = await getReclamoEstadosFromFirestore();
       const reclamo = await iniciarGestionReclamo(reclamoId, operator, estados);
+      return NextResponse.json({
+        ok: true,
+        reclamo: {
+          ...reclamo,
+          adminBandeja: reclamo.adminBandeja ?? computeAdminBandeja(reclamo),
+        },
+      });
+    }
+
+    if (body?.archivar === true) {
+      const motivo =
+        typeof body?.motivo === 'string' && body.motivo.trim()
+          ? body.motivo.trim()
+          : 'Reclamo archivado';
+      const reclamo = await archivarReclamo(reclamoId, operator, motivo);
       return NextResponse.json({
         ok: true,
         reclamo: {

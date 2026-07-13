@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Archive, Loader2 } from 'lucide-react';
+import { useAdminUser } from '@/components/admin/AdminAuth';
 import type { ReclamoAdminBandeja, ReclamoResponsable } from '@/types/reclamos';
 
 export type AdminReclamoListItem = {
@@ -48,6 +49,10 @@ export function AdminReclamosList({
   emptyTitle,
   emptyDescription,
 }: AdminReclamosListProps) {
+  const user = useAdminUser();
+  const canWriteReclamos = user.permissions.includes('reclamos:write');
+  const writeScopeAll = user.reclamosWriteScope === 'all';
+
   const [bandeja, setBandeja] = useState<ReclamoAdminBandeja | 'todos'>(
     mode === 'assigned' ? 'todos' : 'recibidos'
   );
@@ -57,6 +62,42 @@ export function AdminReclamosList({
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [archivingId, setArchivingId] = useState<number | null>(null);
+
+  function canArchiveReclamo(reclamo: AdminReclamoListItem): boolean {
+    if (!canWriteReclamos || reclamo.adminBandeja === 'archivados') return false;
+    if (writeScopeAll) return true;
+    const email = reclamo.responsable?.email?.toLowerCase();
+    return Boolean(email && email === user.email.toLowerCase());
+  }
+
+  async function handleArchivar(reclamo: AdminReclamoListItem) {
+    const esDuplicado = window.confirm(
+      `¿Archivar el reclamo #${reclamo.id} de ${reclamo.nombre}?\n\nSe moverá a la bandeja Archivados. Usá esto para duplicados o reclamos que no corresponde gestionar.`
+    );
+    if (!esDuplicado) return;
+
+    setArchivingId(reclamo.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/reclamos/${reclamo.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          archivar: true,
+          motivo: 'Reclamo archivado — duplicado o sin gestión',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo archivar');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo archivar el reclamo');
+    } finally {
+      setArchivingId(null);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,7 +235,7 @@ export function AdminReclamosList({
               <col className="w-[100px]" />
               {mode === 'all' ? <col className="w-[120px]" /> : null}
               <col className="w-[96px]" />
-              <col className="w-[88px]" />
+              <col className="w-[120px]" />
             </colgroup>
             <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
               <tr>
@@ -242,14 +283,31 @@ export function AdminReclamosList({
                     {new Date(reclamo.createdAt).toLocaleDateString('es-AR')}
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <Link
-                      href={`/admin/reclamos/${reclamo.id}`}
-                      className="font-semibold text-[#1a5fb4] hover:underline"
-                    >
-                      {mode === 'assigned' || reclamo.adminBandeja !== 'recibidos'
-                        ? 'Gestionar'
-                        : 'Tomar'}
-                    </Link>
+                    <div className="flex flex-col gap-1.5">
+                      <Link
+                        href={`/admin/reclamos/${reclamo.id}`}
+                        className="font-semibold text-[#1a5fb4] hover:underline"
+                      >
+                        {mode === 'assigned' || reclamo.adminBandeja !== 'recibidos'
+                          ? 'Gestionar'
+                          : 'Tomar'}
+                      </Link>
+                      {canArchiveReclamo(reclamo) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleArchivar(reclamo)}
+                          disabled={archivingId === reclamo.id}
+                          className="flex items-center gap-1 text-left text-xs font-semibold text-slate-500 hover:text-slate-800 disabled:opacity-60"
+                        >
+                          {archivingId === reclamo.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Archive className="h-3 w-3" />
+                          )}
+                          Archivar
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

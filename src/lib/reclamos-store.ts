@@ -26,6 +26,7 @@ import {
   computeAdminBandeja,
   RECLAMO_ESTADO_CARTA_DOCUMENTO,
   RECLAMO_ESTADO_CONSULTA,
+  resolveArchivadoEstado,
 } from '@/lib/reclamos-admin';
 import { reclamoAssignedToIdentity } from '@/lib/admin-assignee-identity';
 
@@ -327,6 +328,31 @@ export async function updateReclamoEstado(
   });
 
   await ref.set(patch, { merge: true });
+}
+
+export async function archivarReclamo(
+  id: number,
+  operator: { email: string; name: string },
+  motivo = 'Reclamo archivado'
+): Promise<StoredReclamoDocument> {
+  const estados = await getReclamoEstadosFromFirestore();
+  const archivado = resolveArchivadoEstado(estados);
+  if (!archivado) {
+    throw new Error('No hay un estado de archivo configurado en el catálogo');
+  }
+
+  await updateReclamoEstado(
+    id,
+    archivado.id,
+    archivado.descripcion.trim(),
+    archivado.idGrupoEstado,
+    operator,
+    motivo
+  );
+
+  const fresh = await getReclamoByIdFromFirestore(id);
+  if (!fresh) throw new Error('Reclamo no encontrado');
+  return fresh;
 }
 
 export async function iniciarGestionReclamo(
