@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const meta = event.data;
+    const emailId = meta.email_id!;
     const toAddresses = meta.to ?? [];
     const reclamoId =
       parseReclamoIdFromReplyAddress(toAddresses) ??
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     let body = '';
 
     try {
-      const received = await fetchReceivedEmailContent(meta.email_id);
+      const received = await fetchReceivedEmailContent(emailId);
       subject = received.subject ?? subject;
       body = (received.text?.trim() || stripHtml(received.html ?? '')).trim();
     } catch (fetchError) {

@@ -96,31 +96,37 @@ export async function findSimilarReclamoComunicaciones(
 ): Promise<ReclamoComunicacionSugerencia[]> {
   const snap = await dbOrThrow().collection('reclamos').get();
 
-  const candidatos = snap.docs
-    .map((doc) => doc.data() as StoredReclamoDocument)
-    .filter((item) => !item.deletedAt && item.id !== current.id)
-    .map((item) => {
-      const comunicacion = latestComunicacion(item.comunicaciones);
-      if (!comunicacion) return null;
-      const { score, motivos } = scoreSimilarity(current, item);
-      if (score <= 0) return null;
-      return {
-        reclamoId: item.id,
-        resumen: item.resumen,
-        empresas: empresaLabel(item),
-        estadoDescripcion: item.estadoDescripcion ?? 'Consulta',
-        motivos,
-        score,
-        comunicacion: {
-          subject: comunicacion.subject,
-          body: comunicacion.body,
-          sentAt: comunicacion.sentAt,
-          viaIA: comunicacion.viaIA,
-        },
-      } satisfies ReclamoComunicacionSugerencia;
-    })
-    .filter((item): item is ReclamoComunicacionSugerencia => item !== null)
-    .sort((a, b) => b.score - a.score || b.comunicacion.sentAt.localeCompare(a.comunicacion.sentAt));
+  const candidatos: ReclamoComunicacionSugerencia[] = [];
+
+  for (const doc of snap.docs) {
+    const item = doc.data() as StoredReclamoDocument;
+    if (item.deletedAt || item.id === current.id) continue;
+
+    const comunicacion = latestComunicacion(item.comunicaciones);
+    if (!comunicacion) continue;
+
+    const { score, motivos } = scoreSimilarity(current, item);
+    if (score <= 0) continue;
+
+    candidatos.push({
+      reclamoId: item.id,
+      resumen: item.resumen,
+      empresas: empresaLabel(item),
+      estadoDescripcion: item.estadoDescripcion ?? 'Consulta',
+      motivos,
+      score,
+      comunicacion: {
+        subject: comunicacion.subject,
+        body: comunicacion.body,
+        sentAt: comunicacion.sentAt,
+        viaIA: comunicacion.viaIA,
+      },
+    });
+  }
+
+  candidatos.sort(
+    (a, b) => b.score - a.score || b.comunicacion.sentAt.localeCompare(a.comunicacion.sentAt)
+  );
 
   return candidatos.slice(0, limit);
 }
