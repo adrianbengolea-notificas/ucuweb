@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminPermission } from '@/lib/admin-session';
-import { countAdminReclamosByBandeja, countAssignedReclamos } from '@/lib/reclamos-store';
+import { countAdminReclamosRecibidos } from '@/lib/reclamos-store';
 
 export async function GET(request: NextRequest) {
   const session = requireAdminPermission(request, 'reclamos:read');
@@ -9,12 +9,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [counts, assignedCount] = await Promise.all([
-      countAdminReclamosByBandeja(),
-      countAssignedReclamos(session.email, session.name),
-    ]);
+    const recibidos = await countAdminReclamosRecibidos();
 
-    return NextResponse.json({ counts, assignedCount });
+    return NextResponse.json({
+      counts: {
+        recibidos,
+        gestion: 0,
+        archivados: 0,
+      },
+      // La campana del shell no usa assignedCount; se calcula al listar Asignados.
+      assignedCount: 0,
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Firebase no configurado' }, { status: 500 });

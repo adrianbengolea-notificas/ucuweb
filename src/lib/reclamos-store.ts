@@ -207,18 +207,40 @@ export type ListAdminReclamosOptions = {
   assigneeName?: string;
 };
 
+async function countReclamosByQuery(
+  query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData>
+): Promise<number> {
+  const snap = await query.count().get();
+  return snap.data().count;
+}
+
+/** Solo “recibidos” — usado por la campana del admin (1 aggregation). */
+export async function countAdminReclamosRecibidos(): Promise<number> {
+  return countReclamosByQuery(
+    dbOrThrow().collection('reclamos').where('adminBandeja', '==', 'recibidos')
+  );
+}
+
+/** Conteos por bandeja vía aggregation (≈1 lectura / 1000 matches), sin full-scan. */
 export async function countAdminReclamosByBandeja(): Promise<AdminReclamoCounts> {
-  const snap = await dbOrThrow().collection('reclamos').get();
-  const counts: AdminReclamoCounts = { recibidos: 0, gestion: 0, archivados: 0 };
+  const db = dbOrThrow();
+  const bandejas: ReclamoAdminBandeja[] = ['recibidos', 'gestion', 'archivados'];
 
-  for (const doc of snap.docs) {
-    const data = doc.data() as StoredReclamoDocument;
-    if (data.deletedAt) continue;
-    const bandeja = data.adminBandeja ?? computeAdminBandeja(data);
-    counts[bandeja] += 1;
-  }
+  const entries = await Promise.all(
+    bandejas.map(async (bandeja) => {
+      const count = await countReclamosByQuery(
+        db.collection('reclamos').where('adminBandeja', '==', bandeja)
+      );
+      return [bandeja, count] as const;
+    })
+  );
 
-  return counts;
+  return {
+    recibidos: 0,
+    gestion: 0,
+    archivados: 0,
+    ...Object.fromEntries(entries),
+  };
 }
 
 function matchesAssignee(
@@ -229,22 +251,25 @@ function matchesAssignee(
   return reclamoAssignedToIdentity(reclamo, emails, assigneeName);
 }
 
+/** Conteo asignados por email (aggregation). El match por nombre legacy queda fuera a propósito. */
 export async function countAssignedReclamos(
   loginEmail: string,
-  assigneeName?: string
+  _assigneeName?: string
 ): Promise<number> {
-  const { getAssigneeMatchContext } = await import('@/lib/admin-assignee-identity');
-  const { emails, name } = await getAssigneeMatchContext(loginEmail);
-  const snap = await dbOrThrow().collection('reclamos').get();
-  let count = 0;
+  const { getAssigneeMatchEmails } = await import('@/lib/admin-assignee-identity');
+  const emails = await getAssigneeMatchEmails(loginEmail);
+  if (!emails.length) return 0;
 
-  for (const doc of snap.docs) {
-    const data = doc.data() as StoredReclamoDocument;
-    if (data.deletedAt) continue;
-    if (matchesAssignee(data, emails, assigneeName ?? name)) count += 1;
-  }
+  const db = dbOrThrow();
+  const counts = await Promise.all(
+    emails.map((email) =>
+      countReclamosByQuery(
+        db.collection('reclamos').where('responsable.email', '==', email)
+      )
+    )
+  );
 
-  return count;
+  return counts.reduce((sum, n) => sum + n, 0);
 }
 
 export async function getReclamoCausasFromFirestore(): Promise<ReclamoCausaCatalog[]> {
