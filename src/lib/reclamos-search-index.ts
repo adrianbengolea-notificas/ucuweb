@@ -13,6 +13,32 @@ import type {
 const COLLECTION = 'reclamos_busqueda';
 const HECHO_PREVIEW_LEN = 400;
 
+const SEARCH_STOPWORDS = new Set([
+  'reclamo',
+  'reclamos',
+  'denuncia',
+  'denuncias',
+  'contra',
+  'buscar',
+  'busca',
+  'busqueda',
+  'todas',
+  'todos',
+  'sobre',
+  'empresa',
+  'empresas',
+  'caso',
+  'casos',
+  'resumen',
+  'resumir',
+  'resumem',
+  'explica',
+  'explicar',
+  'haceme',
+  'hacer',
+  'tenemos',
+]);
+
 function dbOrThrow() {
   const db = getAdminDb();
   if (!db) throw new Error('Firebase Admin no configurado.');
@@ -26,6 +52,55 @@ function normalizeSearchText(value: string): string {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function collapseAlnum(value: string): string {
+  return value.replace(/[^a-z0-9]/g, '');
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const prev = new Array<number>(b.length + 1);
+  const curr = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+  }
+
+  return prev[b.length];
+}
+
+function maxEditDistance(len: number): number {
+  if (len <= 4) return 1;
+  if (len <= 8) return 2;
+  return 3;
+}
+
+function tokenMatchesEmpresa(token: string, query: string): boolean {
+  if (token.length < 3) return false;
+  if (token.includes(query) || query.includes(token)) {
+    // Evita falsos positivos con tokens muy cortos dentro del query.
+    if (token.includes(query)) return query.length >= 3;
+    return token.length >= Math.min(5, query.length);
+  }
+
+  const collapsedToken = collapseAlnum(token);
+  const collapsedQuery = collapseAlnum(query);
+  if (collapsedToken.includes(collapsedQuery) || collapsedQuery.includes(collapsedToken)) {
+    return Math.min(collapsedToken.length, collapsedQuery.length) >= 4;
+  }
+
+  if (Math.abs(token.length - query.length) > maxEditDistance(query.length)) return false;
+  return levenshtein(token, query) <= maxEditDistance(query.length);
 }
 
 export function buildSearchIndexDoc(reclamo: StoredReclamoDocument): ReclamoSearchIndexDoc {
@@ -107,7 +182,9 @@ export async function getSearchIndexMeta(): Promise<{
 async function loadIndexDocs(filters: ReclamoSearchFilters): Promise<ReclamoSearchIndexDoc[]> {
   const db = dbOrThrow();
 
-  if (filters.empresaId) {
+  // Solo estrechar por ID cuando no hay texto libre: muchos reclamos cargan la
+  // empresa en "otras empresas" / con typos y no tienen el empresaId de catálogo.
+  if (filters.empresaId && !filters.empresaQuery) {
     const snap = await db
       .collection(COLLECTION)
       .where('empresaIds', 'array-contains', filters.empresaId)
@@ -127,7 +204,27 @@ function matchesKeywords(textoSearch: string, keywords: string[]): boolean {
 function matchesEmpresaQuery(empresaSearch: string, query: string): boolean {
   const normalized = normalizeSearchText(query);
   if (!normalized) return true;
-  return empresaSearch.includes(normalized);
+  if (empresaSearch.includes(normalized)) return true;
+
+  const collapsedSearch = collapseAlnum(empresaSearch);
+  const collapsedQuery = collapseAlnum(normalized);
+  if (collapsedQuery.length >= 3 && collapsedSearch.includes(collapsedQuery)) return true;
+
+  const tokens = empresaSearch.split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.some((token) => tokenMatchesEmpresa(token, normalized));
+}
+
+function matchesEmpresaFilter(doc: ReclamoSearchIndexDoc, filters: ReclamoSearchFilters): boolean {
+  const byId =
+    filters.empresaId != null && Array.isArray(doc.empresaIds) && doc.empresaIds.includes(filters.empresaId);
+  const byQuery = filters.empresaQuery
+    ? matchesEmpresaQuery(doc.empresaSearch ?? '', filters.empresaQuery)
+    : false;
+
+  if (filters.empresaId != null && filters.empresaQuery) return byId || byQuery;
+  if (filters.empresaId != null) return byId;
+  if (filters.empresaQuery) return byQuery;
+  return true;
 }
 
 function matchesDateRange(createdAt: string, dateFrom?: string, dateTo?: string): boolean {
@@ -192,9 +289,7 @@ export async function searchReclamosIndex(
     if (filters.idGrupoEstado != null && doc.idGrupoEstado !== filters.idGrupoEstado) {
       return false;
     }
-    if (filters.empresaQuery && !matchesEmpresaQuery(doc.empresaSearch, filters.empresaQuery)) {
-      return false;
-    }
+    if (!matchesEmpresaFilter(doc, filters)) return false;
     if (!matchesKeywords(doc.textoSearch, filters.keywords ?? [])) return false;
     if (!matchesCausaKeywords(doc.causaTextos, filters.causaKeywords)) return false;
     if (!matchesDateRange(doc.createdAt, filters.dateFrom, filters.dateTo)) return false;
@@ -217,18 +312,49 @@ export async function resolveEmpresaIdByName(query: string): Promise<number | nu
   const normalized = normalizeSearchText(query);
   if (normalized.length < 2) return null;
 
-  const snap = await db
-    .collection('reclamos_empresas')
-    .orderBy('nombreSearch')
-    .startAt(normalized)
-    .endAt(`${normalized}\uf8ff`)
-    .limit(1)
-    .get();
+  const snap = await db.collection('reclamos_empresas').get();
+  let best: { id: number; score: number } | null = null;
 
-  const first = snap.docs[0]?.data() as { id?: number; nombreSearch?: string } | undefined;
-  if (!first?.id) return null;
-  if (first.nombreSearch && !first.nombreSearch.includes(normalized.slice(0, 3))) return null;
-  return first.id;
+  for (const doc of snap.docs) {
+    const data = doc.data() as { id?: number; nombreSearch?: string; nombre?: string };
+    if (!data.id) continue;
+    const name = normalizeSearchText(data.nombreSearch || data.nombre || '');
+    if (!name) continue;
+
+    if (name === normalized) return data.id;
+
+    let score = 0;
+    if (name.startsWith(normalized) || normalized.startsWith(name)) score = 3;
+    else if (name.includes(normalized) || normalized.includes(name)) score = 2;
+    else if (matchesEmpresaQuery(name, normalized)) score = 1;
+
+    if (score > 0 && (!best || score > best.score)) {
+      best = { id: data.id, score };
+    }
+  }
+
+  return best?.id ?? null;
+}
+
+function stripEmpresaFromKeywords(keywords: string[] | undefined, empresaQuery?: string): string[] {
+  if (!keywords?.length) return [];
+
+  const eq = empresaQuery ? normalizeSearchText(empresaQuery) : '';
+  const eqCollapsed = eq ? collapseAlnum(eq) : '';
+
+  return keywords.filter((kw) => {
+    const n = normalizeSearchText(kw);
+    if (!n || n.length < 3) return false;
+    if (SEARCH_STOPWORDS.has(n)) return false;
+    if (!eq) return true;
+    if (n === eq) return false;
+    if (eq.includes(n) || n.includes(eq)) return false;
+    const collapsed = collapseAlnum(n);
+    if (eqCollapsed && (eqCollapsed.includes(collapsed) || collapsed.includes(eqCollapsed))) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export async function mergeParsedFilters(
@@ -250,10 +376,12 @@ export async function mergeParsedFilters(
   } else if (merged.empresaQuery && !merged.empresaId) {
     const id = await resolveEmpresaIdByName(merged.empresaQuery);
     if (id) {
+      // Conservar empresaQuery: el ID de catálogo suma hits, no reemplaza el texto libre.
       merged.empresaId = id;
-      merged.empresaQuery = undefined;
     }
   }
+
+  merged.keywords = stripEmpresaFromKeywords(merged.keywords, merged.empresaQuery);
 
   return merged;
 }

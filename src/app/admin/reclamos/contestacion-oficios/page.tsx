@@ -277,8 +277,8 @@ export default function ContestacionOficiosPage() {
                   {hits.slice(0, 100).map((hit) => (
                     <tr key={hit.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80">
                       <td className="px-4 py-3 font-medium">{hit.id}</td>
-                      <td className="max-w-[140px] truncate px-4 py-3" title={hit.empresaNombres.join(', ')}>
-                        {hit.empresaNombres[0] ?? '—'}
+                      <td className="max-w-[200px] truncate px-4 py-3" title={hit.empresaNombres.join(', ')}>
+                        {hit.empresaNombres.join(', ') || '—'}
                       </td>
                       <td className="max-w-xs truncate px-4 py-3" title={hit.resumen}>
                         {hit.resumen}
