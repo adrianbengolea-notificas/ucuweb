@@ -389,9 +389,10 @@ Respondé SOLO JSON válido con esta forma:
 }
 Reglas:
 - idGrupoEstado 3 = archivados; null = todos los grupos salvo que digan explícitamente archivados/activos.
-- keywords: términos útiles para buscar en resumen/hechos (sin stopwords).
+- Si el pedido es listar/resumir reclamos contra una empresa (sin otro tema), keywords debe ser [] vacío. El nombre de la empresa va SOLO en empresaQuery.
+- keywords: términos del tema/hecho (producto, servicio, tipo de abuso). NUNCA repitas ahí el nombre de la empresa.
 - Si no hay fecha, dateFrom y dateTo en null.
-- empresaQuery: nombre comercial tal como lo diría un operador (ej. "Mercado Libre", "Garbarino").`;
+- empresaQuery: nombre comercial tal como lo diría un operador (ej. "Mercado Libre", "Garbarino", "Fenajor"). Conservá la ortografía más cercana al pedido; el buscador tolera typos.`;
 
   const raw = await callGemini(system, instruction, { json: true });
   const parsed = JSON.parse(raw) as ParsedReclamoSearchInstruction;
