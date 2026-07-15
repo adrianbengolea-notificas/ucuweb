@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bell } from 'lucide-react';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useAdminUser } from '@/components/admin/AdminAuth';
 import { cn } from '@/lib/utils';
 
@@ -20,8 +20,6 @@ type ReclamoAlertsContextValue = {
   hasNewArrival: boolean;
   dismissNewArrival: () => void;
 };
-
-const POLL_INTERVAL_MS = 30_000;
 
 const defaultCounts: ReclamoAlertCounts = {
   recibidos: 0,
@@ -49,8 +47,6 @@ export function AdminReclamoAlertsProvider({ children }: { children: React.React
   const [counts, setCounts] = useState<ReclamoAlertCounts>(defaultCounts);
   const [loading, setLoading] = useState(canRead);
   const [hasNewArrival, setHasNewArrival] = useState(false);
-  const prevRecibidosRef = useRef<number | null>(null);
-  const initialFetchDone = useRef(false);
 
   const dismissNewArrival = useCallback(() => setHasNewArrival(false), []);
 
@@ -62,20 +58,12 @@ export function AdminReclamoAlertsProvider({ children }: { children: React.React
       const data = await res.json();
       if (!res.ok) return;
 
-      const next: ReclamoAlertCounts = {
+      setCounts({
         recibidos: data.counts?.recibidos ?? 0,
         gestion: data.counts?.gestion ?? 0,
         archivados: data.counts?.archivados ?? 0,
         assignedCount: data.assignedCount ?? 0,
-      };
-
-      if (initialFetchDone.current && prevRecibidosRef.current !== null && next.recibidos > prevRecibidosRef.current) {
-        setHasNewArrival(true);
-      }
-
-      prevRecibidosRef.current = next.recibidos;
-      initialFetchDone.current = true;
-      setCounts(next);
+      });
     } finally {
       setLoading(false);
     }
@@ -87,9 +75,8 @@ export function AdminReclamoAlertsProvider({ children }: { children: React.React
       return;
     }
 
-    fetchCounts();
-    const id = window.setInterval(fetchCounts, POLL_INTERVAL_MS);
-    return () => window.clearInterval(id);
+    // Una sola vez al abrir el admin: evita lecturas continuas en Firestore.
+    void fetchCounts();
   }, [canRead, fetchCounts]);
 
   useEffect(() => {
