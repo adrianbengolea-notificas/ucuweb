@@ -1,9 +1,21 @@
-import type { Metadata } from 'next';
+﻿import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FalloPdfViewer } from '@/components/observatorio/FalloPdfViewer';
+import { JsonLd } from '@/components/seo/JsonLd';
 import { resolveFalloFileUrl } from '@/lib/fallos-files';
-import { formatDemandado, formatMonto, getFalloById } from '@/lib/observatorio';
+import {
+  buildFalloShareTitle,
+  formatDemandado,
+  formatMonto,
+  getFalloById,
+} from '@/lib/observatorio';
+import {
+  breadcrumbJsonLd,
+  buildPageMetadata,
+  truncateMeta,
+  webPageJsonLd,
+} from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,13 +28,35 @@ export async function generateMetadata({
   const fallo = await getFalloById(Number(id));
 
   if (!fallo) {
-    return { title: 'Fallo no encontrado — Observatorio UCU' };
+    return { title: 'Fallo no encontrado' };
   }
 
-  return {
-    title: `${fallo.actor || 'Fallo'} — Observatorio UCU`,
-    description: fallo.resumen?.slice(0, 160) || 'Detalle del fallo jurisprudencial.',
-  };
+  const shareTitle = buildFalloShareTitle(fallo);
+  const shareDescription = truncateMeta(
+    fallo.resumen ||
+      'Detalle del fallo jurisprudencial en defensa del consumidor ÔÇö Observatorio UCU.'
+  );
+
+  return buildPageMetadata({
+    title: shareTitle,
+    description: shareDescription,
+    path: `/observatorio/fallo/${id}`,
+    type: 'article',
+    keywords: [
+      'fallo consumidor',
+      'jurisprudencia',
+      'observatorio UCU',
+      fallo.actor,
+      demandadoKeyword(fallo),
+    ].filter((value): value is string => Boolean(value)),
+  });
+}
+
+function demandadoKeyword(
+  fallo: NonNullable<Awaited<ReturnType<typeof getFalloById>>>
+): string | undefined {
+  const value = formatDemandado(fallo);
+  return value && value !== 'Sin especificar' ? value : undefined;
 }
 
 export default async function FalloDetailPage({
@@ -39,6 +73,11 @@ export default async function FalloDetailPage({
 
   const demandado = formatDemandado(fallo);
   const monto = formatMonto(fallo);
+  const shareTitle = buildFalloShareTitle(fallo);
+  const shareDescription = truncateMeta(
+    fallo.resumen ||
+      'Detalle del fallo jurisprudencial en defensa del consumidor ÔÇö Observatorio UCU.'
+  );
   const viewerFiles = fallo.files.map((file) => ({
     id: file.id,
     file: file.file,
@@ -47,11 +86,25 @@ export default async function FalloDetailPage({
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-10">
+      <JsonLd
+        data={[
+          webPageJsonLd({
+            title: shareTitle,
+            description: shareDescription,
+            path: `/observatorio/fallo/${id}`,
+          }),
+          breadcrumbJsonLd([
+            { name: 'Inicio', path: '/' },
+            { name: 'Observatorio', path: '/observatorio' },
+            { name: shareTitle, path: `/observatorio/fallo/${id}` },
+          ]),
+        ]}
+      />
       <Link
         href="/observatorio/buscar"
         className="mb-6 inline-block text-sm text-[#1a5fb4] hover:underline"
       >
-        ← Volver al buscador
+        ÔåÉ Volver al buscador
       </Link>
 
       <article className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -65,7 +118,7 @@ export default async function FalloDetailPage({
           <DetailItem label="Tipo de juicio" value={fallo.tipoJuicio?.nombre} />
           <DetailItem label="Tribunal" value={fallo.juzgado?.nombre} />
           <DetailItem
-            label="Ubicación"
+            label="Ubicaci├│n"
             value={[fallo.ciudad?.nombre, fallo.provincia?.nombre].filter(Boolean).join(', ') || undefined}
           />
           {monto ? <DetailItem label="Monto" value={monto} /> : null}
@@ -109,7 +162,7 @@ export default async function FalloDetailPage({
             Resumen
           </h2>
           <p className="text-base leading-8 text-slate-700">
-            {fallo.resumen || 'No se proporcionó resumen para este fallo.'}
+            {fallo.resumen || 'No se proporcion├│ resumen para este fallo.'}
           </p>
         </section>
 
@@ -138,7 +191,7 @@ function DetailItem({ label, value }: { label: string; value?: string | null }) 
   return (
     <div className="rounded-2xl bg-slate-50 p-4">
       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm font-medium text-slate-800">{value || '—'}</dd>
+      <dd className="mt-1 text-sm font-medium text-slate-800">{value || 'ÔÇö'}</dd>
     </div>
   );
 }
