@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { FileText, Loader2, Search, Sparkles } from 'lucide-react';
 import { useAdminUser } from '@/components/admin/AdminAuth';
-import type { ReclamoSearchHit, ReclamoSearchStats } from '@/types/reclamos-search';
+import { SearchableMultiSelect } from '@/components/admin/SearchableSelect';
+import type { ReclamoCausaCatalog } from '@/types/reclamos';
+import type { ReclamoSearchFilters, ReclamoSearchHit, ReclamoSearchStats } from '@/types/reclamos-search';
 
 type IndexMeta = {
   indexedAt: string | null;
@@ -23,7 +25,10 @@ export default function ContestacionOficiosPage() {
   const [empresaQuery, setEmpresaQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [soloArchivados, setSoloArchivados] = useState(false);
+  const [idGrupoEstado, setIdGrupoEstado] = useState('');
+  const [causaIds, setCausaIds] = useState<string[]>([]);
+  const [keywords, setKeywords] = useState('');
+  const [causasCatalog, setCausasCatalog] = useState<ReclamoCausaCatalog[]>([]);
 
   const [searching, setSearching] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -32,7 +37,22 @@ export default function ContestacionOficiosPage() {
   const [interpretacion, setInterpretacion] = useState<string | null>(null);
   const [hits, setHits] = useState<ReclamoSearchHit[]>([]);
   const [stats, setStats] = useState<ReclamoSearchStats | null>(null);
+  const [filtersApplied, setFiltersApplied] = useState<ReclamoSearchFilters | null>(null);
   const [truncated, setTruncated] = useState(false);
+
+  const causaOptions = useMemo(
+    () =>
+      causasCatalog
+        .filter((causa) => causa.activo !== false)
+        .map((causa) => ({ value: String(causa.id), label: causa.descripcion })),
+    [causasCatalog]
+  );
+
+  const causaLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const causa of causasCatalog) map.set(causa.id, causa.descripcion);
+    return map;
+  }, [causasCatalog]);
 
   const [borrador, setBorrador] = useState('');
 
@@ -50,6 +70,22 @@ export default function ContestacionOficiosPage() {
     loadMeta();
   }, [loadMeta]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/reclamos/causas', { credentials: 'include' })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'No se pudieron cargar las causas');
+        if (!cancelled) setCausasCatalog(Array.isArray(data.causas) ? data.causas : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCausasCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault();
     setSearching(true);
@@ -58,6 +94,7 @@ export default function ContestacionOficiosPage() {
     setInterpretacion(null);
     setHits([]);
     setStats(null);
+    setFiltersApplied(null);
 
     try {
       const res = await fetch('/api/admin/reclamos/contestacion/buscar', {
@@ -69,7 +106,9 @@ export default function ContestacionOficiosPage() {
           empresaQuery: empresaQuery.trim() || undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
-          idGrupoEstado: soloArchivados ? 3 : undefined,
+          idGrupoEstado: idGrupoEstado ? Number(idGrupoEstado) : undefined,
+          causaIds: causaIds.map(Number).filter((id) => id > 0),
+          keywords: keywords.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -78,6 +117,7 @@ export default function ContestacionOficiosPage() {
       setInterpretacion(data.interpretacion ?? null);
       setHits(data.hits ?? []);
       setStats(data.stats ?? null);
+      setFiltersApplied(data.filtersApplied ?? null);
       setTruncated(Boolean(data.truncated));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado');
@@ -126,8 +166,8 @@ export default function ContestacionOficiosPage() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Contestación de oficios</h1>
             <p className="mt-1 max-w-2xl text-slate-500">
-              Describí qué reclamos necesitás localizar. La IA interpreta la consigna, busca en el
-              índice y puede redactar un borrador de respuesta formal (texto editable).
+              Describí el oficio o usá los filtros. La empresa y las causas que elijas acotan el
+              resultado y pisan lo que interprete la IA (texto editable para el borrador).
             </p>
           </div>
         </div>
@@ -160,7 +200,7 @@ export default function ContestacionOficiosPage() {
         </div>
       )}
 
-      <form onSubmit={handleSearch} className="mb-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSearch} className="mb-8 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-800">
             Instrucción para la IA
@@ -168,57 +208,99 @@ export default function ContestacionOficiosPage() {
           <textarea
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
-            rows={4}
-            placeholder="Ej.: Todos los reclamos contra Mercado Libre por incumplimiento de entrega entre 2022 y 2024, incluyendo archivados…"
-            className="field-input min-h-28"
+            rows={3}
+            placeholder="Ej.: Reclamos contra FCA por mora en el plan de ahorro…"
+            className="field-input min-h-24"
           />
         </label>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Empresa (opcional)</span>
-            <input
-              className="field-input"
-              value={empresaQuery}
-              onChange={(e) => setEmpresaQuery(e.target.value)}
-              placeholder="Nombre comercial…"
+        <div>
+          <p className="mb-3 text-sm font-semibold text-slate-800">Filtros</p>
+          <p className="mb-4 text-xs text-slate-500">
+            Si cargás empresa o causas acá, la búsqueda se limita a eso. “FCA de ahorro” no trae
+            Chevrolet ni Círculo: el rubro “ahorro para fines” es común a todas las administradoras.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Empresa</span>
+              <input
+                className="field-input"
+                value={empresaQuery}
+                onChange={(e) => setEmpresaQuery(e.target.value)}
+                placeholder="FCA, Fiat Plan, Mercado Libre…"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Estado</span>
+              <select
+                className="field-input"
+                value={idGrupoEstado}
+                onChange={(e) => setIdGrupoEstado(e.target.value)}
+              >
+                <option value="">Todos</option>
+                <option value="1">Activos</option>
+                <option value="2">En trámite</option>
+                <option value="3">Archivados</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Desde</span>
+              <input
+                type="date"
+                className="field-input"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Hasta</span>
+              <input
+                type="date"
+                className="field-input"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <SearchableMultiSelect
+              label="Causas de reclamo"
+              values={causaIds}
+              options={causaOptions}
+              onChange={setCausaIds}
+              placeholder="mora, quita, falta de entrega…"
+              hint="Escribí para buscar en el catálogo. Si elegís varias, alcanza con que el reclamo tenga una."
             />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Desde</span>
-            <input
-              type="date"
-              className="field-input"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Hasta</span>
-            <input
-              type="date"
-              className="field-input"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-          </label>
-          <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={soloArchivados}
-              onChange={(e) => setSoloArchivados(e.target.checked)}
-              className="rounded border-slate-300"
-            />
-            Solo archivados
-          </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Tema / palabras clave</span>
+              <input
+                className="field-input"
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                placeholder="cuota, débito, entrega del auto…"
+              />
+              <span className="mt-1 block text-xs text-slate-500">
+                Separá con coma. Se buscan en el resumen y el hecho, no en el nombre de la empresa.
+              </span>
+            </label>
+          </div>
         </div>
 
         <button
           type="submit"
           disabled={
             searching ||
-            (!empresaQuery.trim() && !instruction.trim()) ||
-            (Boolean(instruction.trim()) && !empresaQuery.trim() && !meta?.geminiConfigured)
+            (!instruction.trim() &&
+              !empresaQuery.trim() &&
+              !causaIds.length &&
+              !keywords.trim() &&
+              !dateFrom &&
+              !dateTo &&
+              !idGrupoEstado) ||
+            (Boolean(instruction.trim()) &&
+              !empresaQuery.trim() &&
+              !causaIds.length &&
+              !meta?.geminiConfigured)
           }
           className="inline-flex items-center gap-2 rounded-lg bg-[#1a5fb4] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#004a80] disabled:opacity-60"
         >
@@ -237,9 +319,51 @@ export default function ContestacionOficiosPage() {
         </div>
       )}
 
-      {interpretacion && (
-        <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-          <strong>Interpretación:</strong> {interpretacion}
+      {(interpretacion || filtersApplied) && (
+        <div className="mb-6 space-y-3">
+          {interpretacion ? (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              <strong>Interpretación:</strong> {interpretacion}
+            </div>
+          ) : null}
+          {filtersApplied ? (
+            <div className="flex flex-wrap gap-2 text-xs">
+              {filtersApplied.empresaQuery ? (
+                <span className="rounded-full bg-[#eef5ff] px-3 py-1 font-medium text-[#1a5fb4]">
+                  Empresa: {filtersApplied.empresaQuery}
+                </span>
+              ) : null}
+              {(filtersApplied.causaIds ?? []).map((id) => (
+                <span key={id} className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">
+                  Causa: {causaLabelById.get(id) ?? `#${id}`}
+                </span>
+              ))}
+              {(filtersApplied.causaKeywords ?? []).map((kw) => (
+                <span key={kw} className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">
+                  Causa: {kw}
+                </span>
+              ))}
+              {(filtersApplied.keywords ?? []).map((kw) => (
+                <span key={kw} className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">
+                  Tema: {kw}
+                </span>
+              ))}
+              {filtersApplied.idGrupoEstado === 1 ? (
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">Activos</span>
+              ) : null}
+              {filtersApplied.idGrupoEstado === 2 ? (
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">En trámite</span>
+              ) : null}
+              {filtersApplied.idGrupoEstado === 3 ? (
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">Archivados</span>
+              ) : null}
+              {filtersApplied.dateFrom || filtersApplied.dateTo ? (
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">
+                  {filtersApplied.dateFrom || '…'} → {filtersApplied.dateTo || '…'}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -264,11 +388,12 @@ export default function ContestacionOficiosPage() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[880px] text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Nº</th>
                     <th className="px-4 py-3 font-semibold">Empresa</th>
+                    <th className="px-4 py-3 font-semibold">Causas</th>
                     <th className="px-4 py-3 font-semibold">Resumen</th>
                     <th className="px-4 py-3 font-semibold">Estado</th>
                     <th className="px-4 py-3 font-semibold">Fecha</th>
@@ -284,6 +409,12 @@ export default function ContestacionOficiosPage() {
                         title={(hit.empresaNombres ?? []).join(', ')}
                       >
                         {(hit.empresaNombres ?? []).join(', ') || '—'}
+                      </td>
+                      <td
+                        className="max-w-[220px] truncate px-4 py-3 text-slate-600"
+                        title={(hit.causaTextos ?? []).join(', ')}
+                      >
+                        {(hit.causaTextos ?? []).join(', ') || '—'}
                       </td>
                       <td className="max-w-xs truncate px-4 py-3" title={hit.resumen}>
                         {hit.resumen}

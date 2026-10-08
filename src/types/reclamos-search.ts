@@ -27,6 +27,7 @@ export type ReclamoSearchFilters = {
   dateTo?: string;
   idGrupoEstado?: number;
   causaKeywords?: string[];
+  causaIds?: number[];
 };
 
 export type ReclamoSearchHit = {

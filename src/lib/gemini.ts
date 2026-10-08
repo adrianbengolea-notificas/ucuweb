@@ -512,16 +512,23 @@ Respondé SOLO JSON válido con esta forma:
     "keywords": ["palabras clave del tema en minúsculas"],
     "dateFrom": "YYYY-MM-DD o null",
     "dateTo": "YYYY-MM-DD o null",
-    "idGrupoEstado": null o 3 si piden archivados,
-    "causaKeywords": ["términos de motivo/causa si los hay"]
+    "idGrupoEstado": null, 1 (activos), 2 (en trámite) o 3 (archivados),
+    "causaKeywords": ["motivo de reclamo si lo piden: mora, quita, falta de entrega, etc."]
   }
 }
 Reglas:
-- idGrupoEstado 3 = archivados; null = todos los grupos salvo que digan explícitamente archivados/activos.
-- Si el pedido es listar/resumir reclamos contra una empresa (sin otro tema), keywords debe ser [] vacío. El nombre de la empresa va SOLO en empresaQuery.
-- keywords: términos del tema/hecho (producto, servicio, tipo de abuso). NUNCA repitas ahí el nombre de la empresa.
+- idGrupoEstado solo si lo piden explícitamente; si no, null (todos).
+- Si el pedido es listar/resumir reclamos contra una empresa (sin otro tema), keywords y causaKeywords deben ser [] vacíos. El nombre de la empresa va SOLO en empresaQuery.
+- empresaQuery es la MARCA o razón social distintiva. En Argentina "SA de Ahorro para Fines Determinados" es la forma legal de TODAS las administradoras de planes: NO la uses como empresa ni como keyword.
+  Ejemplos:
+  - "reclamos contra FCA de ahorro" → empresaQuery: "FCA", keywords: [], causaKeywords: []
+  - "casos Fiat Plan / FCA" → empresaQuery: "FCA", keywords: []
+  - "todas las administradoras de planes de ahorro" → empresaQuery: null, keywords: [] (el operador filtrará)
+  - "reclamos contra FCA por mora" → empresaQuery: "FCA", causaKeywords: ["mora"], keywords: []
+- keywords: tema/hecho concreto (producto, servicio, abuso). NUNCA pongas ahorro, plan, planes, fines, determinados, sa, ni el nombre de la empresa.
+- causaKeywords: solo el motivo (mora, quita, incumplimiento, falta de entrega, débito, etc.). No copies ahí el rubro "plan de ahorro".
 - Si no hay fecha, dateFrom y dateTo en null.
-- empresaQuery: nombre comercial tal como lo diría un operador (ej. "Mercado Libre", "Garbarino", "Fenajor"). Conservá la ortografía más cercana al pedido; el buscador tolera typos.`;
+- Conservá la ortografía más cercana al pedido; el buscador tolera typos.`;
 
   const raw = await callGemini(system, instruction, { json: true });
   const parsed = parseGeminiJsonObject(raw);
@@ -542,7 +549,8 @@ Reglas:
       keywords: asStringArray(filtersRaw.keywords),
       dateFrom: asIsoDate(filtersRaw.dateFrom),
       dateTo: asIsoDate(filtersRaw.dateTo),
-      idGrupoEstado: idGrupoEstado === 3 ? 3 : undefined,
+      idGrupoEstado:
+        idGrupoEstado === 1 || idGrupoEstado === 2 || idGrupoEstado === 3 ? idGrupoEstado : undefined,
       causaKeywords: asStringArray(filtersRaw.causaKeywords),
     },
   };

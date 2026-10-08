@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminPermission } from '@/lib/admin-session';
 import { getGeminiApiKey, parseReclamoSearchInstruction } from '@/lib/gemini';
+import { empresaBrandsFromText, splitKeywordInput } from '@/lib/reclamos-search-match';
 import {
   getSearchIndexMeta,
   mergeParsedFilters,
   searchReclamosIndex,
 } from '@/lib/reclamos-search-index';
 import type { ReclamoSearchFilters } from '@/types/reclamos-search';
+
+function readNumberArray(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item > 0);
+}
 
 function readManualFilters(body: Record<string, unknown>): Partial<ReclamoSearchFilters> {
   const manual: Partial<ReclamoSearchFilters> = {};
@@ -23,11 +31,42 @@ function readManualFilters(body: Record<string, unknown>): Partial<ReclamoSearch
   if (typeof body.dateTo === 'string' && body.dateTo.trim()) {
     manual.dateTo = body.dateTo.trim();
   }
-  if (body.idGrupoEstado === 3 || body.idGrupoEstado === null) {
-    manual.idGrupoEstado = body.idGrupoEstado === 3 ? 3 : undefined;
+  if (body.idGrupoEstado === 1 || body.idGrupoEstado === 2 || body.idGrupoEstado === 3) {
+    manual.idGrupoEstado = body.idGrupoEstado;
   }
+  const causaIds = readNumberArray(body.causaIds);
+  if (causaIds.length) manual.causaIds = causaIds;
+
+  const keywords =
+    typeof body.keywords === 'string'
+      ? splitKeywordInput(body.keywords)
+      : Array.isArray(body.keywords)
+        ? body.keywords.map((item) => String(item ?? '').trim()).filter(Boolean)
+        : [];
+  if (keywords.length) manual.keywords = keywords;
+
+  const causaKeywords =
+    typeof body.causaKeywords === 'string'
+      ? splitKeywordInput(body.causaKeywords)
+      : Array.isArray(body.causaKeywords)
+        ? body.causaKeywords.map((item) => String(item ?? '').trim()).filter(Boolean)
+        : [];
+  if (causaKeywords.length) manual.causaKeywords = causaKeywords;
 
   return manual;
+}
+
+function hasManualCriteria(manual: Partial<ReclamoSearchFilters>): boolean {
+  return Boolean(
+    manual.empresaId ||
+      manual.empresaQuery ||
+      manual.dateFrom ||
+      manual.dateTo ||
+      manual.idGrupoEstado ||
+      manual.causaIds?.length ||
+      manual.keywords?.length ||
+      manual.causaKeywords?.length
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -57,9 +96,9 @@ export async function POST(request: NextRequest) {
   const instruction = typeof body.instruction === 'string' ? body.instruction.trim() : '';
   const manual = readManualFilters(body);
 
-  if (!instruction && !manual.empresaId && !manual.empresaQuery) {
+  if (!instruction && !hasManualCriteria(manual)) {
     return NextResponse.json(
-      { error: 'Escribí una instrucción o seleccioná una empresa' },
+      { error: 'Escribí una instrucción o usá al menos un filtro (empresa, causa, fecha o estado).' },
       { status: 400 }
     );
   }
@@ -92,6 +131,10 @@ export async function POST(request: NextRequest) {
       const parsed = await parseReclamoSearchInstruction(instruction);
       interpretacion = parsed.interpretacion;
       filters = await mergeParsedFilters(parsed.filters, manual);
+      if (!empresaBrandsFromText(filters.empresaQuery ?? '').length) {
+        const brands = empresaBrandsFromText(instruction);
+        if (brands.length) filters.empresaQuery = brands.join(' ');
+      }
     } else {
       filters = await mergeParsedFilters({}, manual);
     }
