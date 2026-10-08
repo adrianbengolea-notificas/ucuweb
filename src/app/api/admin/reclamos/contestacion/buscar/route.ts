@@ -97,17 +97,26 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await searchReclamosIndex(filters, interpretacion);
+    const hits = Array.isArray(result.hits) ? result.hits : [];
 
     return NextResponse.json({
       interpretacion,
-      hits: result.hits.slice(0, 500),
+      hits: hits.slice(0, 500),
       stats: result.stats,
       filtersApplied: result.filtersApplied,
-      truncated: result.hits.length > 500,
+      truncated: hits.length > 500,
     });
   } catch (error) {
     console.error(error);
-    const message = error instanceof Error ? error.message : 'Error en la búsqueda';
+    const raw = error instanceof Error ? error.message : '';
+    const isInternal =
+      !raw ||
+      /cannot read propert/i.test(raw) ||
+      /is not (a )?function/i.test(raw) ||
+      /unexpected token|not valid json/i.test(raw);
+    const message = isInternal
+      ? 'No se pudo completar la búsqueda. Probá de nuevo o usá el filtro de empresa.'
+      : raw;
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

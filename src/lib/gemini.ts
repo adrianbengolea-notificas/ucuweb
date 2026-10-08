@@ -64,6 +64,65 @@ type GeminiApiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
 };
 
+function extractGeminiText(data: GeminiApiResponse): string {
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .map((part) => (typeof part.text === 'string' ? part.text : ''))
+    .join('')
+    .trim();
+}
+
+function parseGeminiJsonObject(raw: string): Record<string, unknown> {
+  const trimmed = raw.trim();
+  const tryParse = (value: string): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* ignore and try fallback */
+    }
+    return null;
+  };
+
+  const direct = tryParse(trimmed);
+  if (direct) return direct;
+
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    const extracted = tryParse(trimmed.slice(start, end + 1));
+    if (extracted) return extracted;
+  }
+
+  throw new Error('Respuesta de IA inválida');
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || /^(null|undefined)$/i.test(trimmed)) return undefined;
+  return trimmed;
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? [value]
+      : [];
+  const cleaned = items.map((item) => String(item ?? '').trim()).filter(Boolean);
+  return cleaned.length ? cleaned : undefined;
+}
+
+function asIsoDate(value: unknown): string | undefined {
+  const raw = asOptionalString(value);
+  if (!raw) return undefined;
+  const iso = raw.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : undefined;
+}
+
 async function postGemini(
   model: string,
   apiKey: string,
@@ -122,7 +181,7 @@ async function callGeminiParts(
     }
   }
 
-  const text = result.data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  const text = extractGeminiText(result.data);
   if (!text) throw new Error('Gemini no devolvió texto');
   return text;
 }
@@ -465,11 +524,28 @@ Reglas:
 - empresaQuery: nombre comercial tal como lo diría un operador (ej. "Mercado Libre", "Garbarino", "Fenajor"). Conservá la ortografía más cercana al pedido; el buscador tolera typos.`;
 
   const raw = await callGemini(system, instruction, { json: true });
-  const parsed = JSON.parse(raw) as ParsedReclamoSearchInstruction;
-  if (!parsed.interpretacion || !parsed.filters) {
+  const parsed = parseGeminiJsonObject(raw);
+  const filtersRaw =
+    parsed.filters && typeof parsed.filters === 'object' && !Array.isArray(parsed.filters)
+      ? (parsed.filters as Record<string, unknown>)
+      : null;
+  const interpretacion = asOptionalString(parsed.interpretacion);
+  if (!interpretacion || !filtersRaw) {
     throw new Error('Respuesta de IA inválida');
   }
-  return parsed;
+
+  const idGrupoEstado = Number(filtersRaw.idGrupoEstado);
+  return {
+    interpretacion,
+    filters: {
+      empresaQuery: asOptionalString(filtersRaw.empresaQuery),
+      keywords: asStringArray(filtersRaw.keywords),
+      dateFrom: asIsoDate(filtersRaw.dateFrom),
+      dateTo: asIsoDate(filtersRaw.dateTo),
+      idGrupoEstado: idGrupoEstado === 3 ? 3 : undefined,
+      causaKeywords: asStringArray(filtersRaw.causaKeywords),
+    },
+  };
 }
 
 export type ParsedFalloSearchInstruction = {
@@ -520,11 +596,33 @@ Reglas:
 - status null o "publish" = solo publicados; "all" si piden incluir borradores.`;
 
   const raw = await callGemini(system, instruction, { json: true });
-  const parsed = JSON.parse(raw) as ParsedFalloSearchInstruction;
-  if (!parsed.interpretacion || !parsed.filters) {
+  const parsed = parseGeminiJsonObject(raw);
+  const filtersRaw =
+    parsed.filters && typeof parsed.filters === 'object' && !Array.isArray(parsed.filters)
+      ? (parsed.filters as Record<string, unknown>)
+      : null;
+  const interpretacion = asOptionalString(parsed.interpretacion);
+  if (!interpretacion || !filtersRaw) {
     throw new Error('Respuesta de IA inválida');
   }
-  return parsed;
+
+  const status = asOptionalString(filtersRaw.status);
+  return {
+    interpretacion,
+    filters: {
+      empresaQuery: asOptionalString(filtersRaw.empresaQuery),
+      actorQuery: asOptionalString(filtersRaw.actorQuery),
+      keywords: asStringArray(filtersRaw.keywords),
+      dateFrom: asIsoDate(filtersRaw.dateFrom),
+      dateTo: asIsoDate(filtersRaw.dateTo),
+      rubroKeywords: asStringArray(filtersRaw.rubroKeywords),
+      causaKeywords: asStringArray(filtersRaw.causaKeywords),
+      etiquetaKeywords: asStringArray(filtersRaw.etiquetaKeywords),
+      provinciaQuery: asOptionalString(filtersRaw.provinciaQuery),
+      tipoJuicioQuery: asOptionalString(filtersRaw.tipoJuicioQuery),
+      status: status === 'all' || status === 'draft' || status === 'publish' ? status : undefined,
+    },
+  };
 }
 
 export async function generateContestacionBorrador(input: {

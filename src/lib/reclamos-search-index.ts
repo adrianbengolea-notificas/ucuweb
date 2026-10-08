@@ -45,13 +45,44 @@ function dbOrThrow() {
   return db;
 }
 
-function normalizeSearchText(value: string): string {
-  return value
+function normalizeSearchText(value: unknown): string {
+  return String(value ?? '')
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function toDatePrefix(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value.slice(0, 10);
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === 'object') {
+    const withToDate = value as { toDate?: () => Date; seconds?: number; _seconds?: number };
+    if (typeof withToDate.toDate === 'function') {
+      try {
+        return withToDate.toDate().toISOString().slice(0, 10);
+      } catch {
+        return '';
+      }
+    }
+    const seconds = withToDate.seconds ?? withToDate._seconds;
+    if (typeof seconds === 'number') {
+      return new Date(seconds * 1000).toISOString().slice(0, 10);
+    }
+  }
+  return '';
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
 }
 
 function collapseAlnum(value: string): string {
@@ -109,8 +140,10 @@ export function buildSearchIndexDoc(reclamo: StoredReclamoDocument): ReclamoSear
     ...(reclamo.otrasEmpresas ? [reclamo.otrasEmpresas.trim()] : []),
   ].filter(Boolean);
 
-  const causaTextos = (reclamo.causas ?? []).map((c) => c.descripcion.trim()).filter(Boolean);
-  const hechoPreview = reclamo.hecho.trim().slice(0, HECHO_PREVIEW_LEN);
+  const causaTextos = (reclamo.causas ?? [])
+    .map((c) => String(c.descripcion ?? '').trim())
+    .filter(Boolean);
+  const hechoPreview = String(reclamo.hecho ?? '').trim().slice(0, HECHO_PREVIEW_LEN);
   const estadoDescripcion = reclamo.estadoDescripcion?.trim() ?? 'Consulta';
 
   const textoSearch = normalizeSearchText(
@@ -133,7 +166,7 @@ export function buildSearchIndexDoc(reclamo: StoredReclamoDocument): ReclamoSear
     `Estado: ${estadoDescripcion}`,
     `Resumen: ${reclamo.resumen}`,
     causaTextos.length ? `Causas: ${causaTextos.join('; ')}` : null,
-    `Registrado: ${reclamo.createdAt.slice(0, 10)}`,
+    `Registrado: ${toDatePrefix(reclamo.createdAt) || '—'}`,
   ]
     .filter(Boolean)
     .join('. ');
@@ -153,7 +186,7 @@ export function buildSearchIndexDoc(reclamo: StoredReclamoDocument): ReclamoSear
     idGrupoEstado: reclamo.idGrupoEstado,
     provinciaNombre: reclamo.denunciante.provinciaNombre,
     ciudadNombre: reclamo.denunciante.ciudadNombre,
-    createdAt: reclamo.createdAt,
+    createdAt: toDatePrefix(reclamo.createdAt) || (typeof reclamo.createdAt === 'string' ? reclamo.createdAt : ''),
     updatedAt: reclamo.updatedAt,
     anonPreview,
     indexedAt: new Date().toISOString(),
@@ -196,9 +229,10 @@ async function loadIndexDocs(filters: ReclamoSearchFilters): Promise<ReclamoSear
   return snap.docs.map((doc) => doc.data() as ReclamoSearchIndexDoc);
 }
 
-function matchesKeywords(textoSearch: string, keywords: string[]): boolean {
+function matchesKeywords(textoSearch: string | undefined, keywords: string[]): boolean {
   if (!keywords.length) return true;
-  return keywords.every((kw) => textoSearch.includes(normalizeSearchText(kw)));
+  const haystack = textoSearch ?? '';
+  return keywords.every((kw) => haystack.includes(normalizeSearchText(kw)));
 }
 
 function matchesEmpresaQuery(empresaSearch: string, query: string): boolean {
@@ -239,16 +273,18 @@ function matchesEmpresaFilter(doc: ReclamoSearchIndexDoc, filters: ReclamoSearch
   return true;
 }
 
-function matchesDateRange(createdAt: string, dateFrom?: string, dateTo?: string): boolean {
-  const date = createdAt.slice(0, 10);
+function matchesDateRange(createdAt: unknown, dateFrom?: string, dateTo?: string): boolean {
+  if (!dateFrom && !dateTo) return true;
+  const date = toDatePrefix(createdAt);
+  if (!date) return false;
   if (dateFrom && date < dateFrom) return false;
   if (dateTo && date > dateTo) return false;
   return true;
 }
 
-function matchesCausaKeywords(causaTextos: string[], keywords?: string[]): boolean {
+function matchesCausaKeywords(causaTextos: string[] | undefined, keywords?: string[]): boolean {
   if (!keywords?.length) return true;
-  const blob = normalizeSearchText(causaTextos.join(' '));
+  const blob = normalizeSearchText((causaTextos ?? []).join(' '));
   return keywords.some((kw) => blob.includes(normalizeSearchText(kw)));
 }
 
@@ -264,7 +300,8 @@ function computeStats(hits: ReclamoSearchHit[]): ReclamoSearchStats {
       hit.idGrupoEstado === 3 ? 'Archivados' : hit.idGrupoEstado === 2 ? 'En trámite' : 'Activos';
     porGrupo[grupo] = (porGrupo[grupo] ?? 0) + 1;
 
-    const d = hit.createdAt.slice(0, 10);
+    const d = toDatePrefix(hit.createdAt);
+    if (!d) continue;
     if (!minDate || d < minDate) minDate = d;
     if (!maxDate || d > maxDate) maxDate = d;
   }
@@ -280,14 +317,14 @@ function computeStats(hits: ReclamoSearchHit[]): ReclamoSearchStats {
 function toHit(doc: ReclamoSearchIndexDoc): ReclamoSearchHit {
   return {
     id: doc.id,
-    resumen: doc.resumen,
-    empresaNombres: doc.empresaNombres,
-    causaTextos: doc.causaTextos,
-    estadoDescripcion: doc.estadoDescripcion,
+    resumen: doc.resumen ?? '',
+    empresaNombres: Array.isArray(doc.empresaNombres) ? doc.empresaNombres : [],
+    causaTextos: Array.isArray(doc.causaTextos) ? doc.causaTextos : [],
+    estadoDescripcion: doc.estadoDescripcion ?? 'Consulta',
     idGrupoEstado: doc.idGrupoEstado,
     provinciaNombre: doc.provinciaNombre,
-    createdAt: doc.createdAt,
-    anonPreview: doc.anonPreview,
+    createdAt: toDatePrefix(doc.createdAt) || (typeof doc.createdAt === 'string' ? doc.createdAt : ''),
+    anonPreview: doc.anonPreview ?? '',
   };
 }
 
@@ -308,7 +345,7 @@ export async function searchReclamosIndex(
     return true;
   });
 
-  filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  filtered.sort((a, b) => toDatePrefix(b.createdAt).localeCompare(toDatePrefix(a.createdAt)));
   const hits = filtered.map(toHit);
 
   return {
@@ -376,10 +413,8 @@ export async function mergeParsedFilters(
   const merged: ReclamoSearchFilters = {
     ...parsed,
     ...manual,
-    keywords: [...(parsed.keywords ?? []), ...(manual?.keywords ?? [])].filter(Boolean),
-    causaKeywords: [...(parsed.causaKeywords ?? []), ...(manual?.causaKeywords ?? [])].filter(
-      Boolean
-    ),
+    keywords: [...asStringArray(parsed.keywords), ...asStringArray(manual?.keywords)],
+    causaKeywords: [...asStringArray(parsed.causaKeywords), ...asStringArray(manual?.causaKeywords)],
   };
 
   if (manual?.empresaId) {

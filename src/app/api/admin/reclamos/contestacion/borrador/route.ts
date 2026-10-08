@@ -28,10 +28,10 @@ export async function POST(request: NextRequest) {
   try {
     const casos = hits.slice(0, 50).map((hit) => ({
       id: hit.id,
-      resumen: hit.resumen,
-      empresas: hit.empresaNombres.join('; ') || '—',
-      estado: hit.estadoDescripcion,
-      fecha: hit.createdAt.slice(0, 10),
+      resumen: hit.resumen ?? '',
+      empresas: (hit.empresaNombres ?? []).join('; ') || '—',
+      estado: hit.estadoDescripcion ?? 'Consulta',
+      fecha: typeof hit.createdAt === 'string' ? hit.createdAt.slice(0, 10) : '—',
     }));
 
     const borrador = await generateContestacionBorrador({
